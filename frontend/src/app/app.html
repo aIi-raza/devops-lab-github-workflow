@@ -1,30 +1,40 @@
 <main class="page">
-  <section class="card">
+  <header class="top">
     <h1>{{ appTitle }}</h1>
     <p class="version">Version: {{ version }}</p>
+  </header>
 
-    <div class="row">
-      <input type="number" [(ngModel)]="a" placeholder="First number" />
-      <select [(ngModel)]="operation">
-        <option value="add">+</option>
-        <option value="subtract">-</option>
-        <option value="multiply">&times;</option>
-        <option value="divide">&divide;</option>
-      </select>
-      <input type="number" [(ngModel)]="b" placeholder="Second number" />
+  <section class="calculator">
+    <div class="expression">{{ expression() }}</div>
+    <div class="display" [class]="'display ' + displaySize()">{{ formatted() }}</div>
+
+    <p class="error">{{ error() }}</p>
+
+    <div class="keys">
+      <button class="key func" (click)="backspace()" aria-label="Backspace">&#9003;</button>
+      <button class="key func" (click)="clear()">AC</button>
+      <button class="key func" (click)="percent()">%</button>
+      <button class="key op" [class.active]="isActive('divide')" (click)="pressOperator('divide')">&divide;</button>
+
+      <button class="key" (click)="pressDigit('7')">7</button>
+      <button class="key" (click)="pressDigit('8')">8</button>
+      <button class="key" (click)="pressDigit('9')">9</button>
+      <button class="key op" [class.active]="isActive('multiply')" (click)="pressOperator('multiply')">&times;</button>
+
+      <button class="key" (click)="pressDigit('4')">4</button>
+      <button class="key" (click)="pressDigit('5')">5</button>
+      <button class="key" (click)="pressDigit('6')">6</button>
+      <button class="key op" [class.active]="isActive('subtract')" (click)="pressOperator('subtract')">&minus;</button>
+
+      <button class="key" (click)="pressDigit('1')">1</button>
+      <button class="key" (click)="pressDigit('2')">2</button>
+      <button class="key" (click)="pressDigit('3')">3</button>
+      <button class="key op" [class.active]="isActive('add')" (click)="pressOperator('add')">+</button>
+
+      <button class="key" (click)="toggleSign()">&plusmn;</button>
+      <button class="key" (click)="pressDigit('0')">0</button>
+      <button class="key" (click)="pressDecimal()">.</button>
+      <button class="key op" (click)="pressEquals()">=</button>
     </div>
-
-    <button (click)="calculate()" [disabled]="loading()">
-      {{ loading() ? 'Calculating...' : 'Calculate' }}
-    </button>
-
-    @if (result() !== null) {
-      <p class="result">Result: {{ result() }}</p>
-    }
-    @if (error()) {
-      <p class="error">{{ error() }}</p>
-    }
-
-    <p class="footer">Angular frontend &harr; Flask backend</p>
   </section>
 </main>

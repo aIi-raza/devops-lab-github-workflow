@@ -1,5 +1,30 @@
 <main class="page">
-  <h1>CI/CD Demo</h1>
-  <p class="version">Version: {{ version }}</p>
-  <p class="owner">Deployed by {{ owner }} using GitHub Actions</p>
+  <section class="card">
+    <h1>{{ appTitle }}</h1>
+    <p class="version">Version: {{ version }}</p>
+
+    <div class="row">
+      <input type="number" [(ngModel)]="a" placeholder="First number" />
+      <select [(ngModel)]="operation">
+        <option value="add">+</option>
+        <option value="subtract">-</option>
+        <option value="multiply">&times;</option>
+        <option value="divide">&divide;</option>
+      </select>
+      <input type="number" [(ngModel)]="b" placeholder="Second number" />
+    </div>
+
+    <button (click)="calculate()" [disabled]="loading()">
+      {{ loading() ? 'Calculating...' : 'Calculate' }}
+    </button>
+
+    @if (result() !== null) {
+      <p class="result">Result: {{ result() }}</p>
+    }
+    @if (error()) {
+      <p class="error">{{ error() }}</p>
+    }
+
+    <p class="footer">Angular frontend &harr; Flask backend</p>
+  </section>
 </main>

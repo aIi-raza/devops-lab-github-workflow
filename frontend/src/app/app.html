@@ -1,40 +1,299 @@
-<main class="page">
-  <header class="top">
-    <h1>{{ appTitle }}</h1>
-    <p class="version">Version: {{ version }}</p>
-  </header>
+<header class="bar">
+  <div class="wrap bar-inner">
+    <button type="button" class="brand" (click)="top()">
+      <span class="brand-mark" aria-hidden="true"></span>
+      NSL-KDD detector
+    </button>
 
-  <section class="calculator">
-    <div class="expression">{{ expression() }}</div>
-    <div class="display" [class]="'display ' + displaySize()">{{ formatted() }}</div>
+    <nav class="nav" aria-label="Page sections">
+      @for (s of sections; track s.id) {
+        <button type="button" class="nav-link" (click)="go(s.id)">{{ s.label }}</button>
+      }
+    </nav>
 
-    <p class="error">{{ error() }}</p>
+    <p
+      class="status"
+      [class.is-online]="apiState() === 'online'"
+      [class.is-offline]="apiState() === 'offline'"
+      [attr.title]="apiNote()"
+    >
+      <span class="dot" aria-hidden="true"></span>
+      {{ apiLabel() }}
+      <span class="ver num">{{ version }}</span>
+    </p>
+  </div>
+</header>
 
-    <div class="keys">
-      <button class="key func" (click)="backspace()" aria-label="Backspace">&#9003;</button>
-      <button class="key func" (click)="clear()">AC</button>
-      <button class="key func" (click)="percent()">%</button>
-      <button class="key op" [class.active]="isActive('divide')" (click)="pressOperator('divide')">&divide;</button>
+<main>
+  <!-- ============ Hero ============ -->
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <!-- DEMO EDIT POINT (HTML): change the heading text below, commit and push -->
+        <h1>Is this network connection an attack?</h1>
+        <p class="lead">
+          We trained models on 148,517 recorded connections to answer that question, then checked our
+          results against a published research paper.
+        </p>
+        <button type="button" class="cta" (click)="go('results')">See the results</button>
+      </div>
 
-      <button class="key" (click)="pressDigit('7')">7</button>
-      <button class="key" (click)="pressDigit('8')">8</button>
-      <button class="key" (click)="pressDigit('9')">9</button>
-      <button class="key op" [class.active]="isActive('multiply')" (click)="pressOperator('multiply')">&times;</button>
+      <div>
+        <p class="cap">The first five rows of the training file (sizes in bytes)</p>
+        <div class="ledger-box">
+          <table class="ledger" aria-label="Five example network connections">
+            <thead>
+              <tr>
+                <th>Protocol</th>
+                <th>Service</th>
+                <th>Flag</th>
+                <th class="r">Sent</th>
+                <th class="r">Received</th>
+                <th>Label</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (s of samples; track $index; let i = $index) {
+                <tr
+                  tabindex="0"
+                  [class.on]="i === selectedRow()"
+                  [style.--d]="i * 120 + 'ms'"
+                  (click)="selectedRow.set(i)"
+                  (keydown.enter)="selectedRow.set(i)"
+                  (keydown.space)="selectedRow.set(i); $event.preventDefault()"
+                >
+                  <td>{{ s.protocol }}</td>
+                  <td>{{ s.service }}</td>
+                  <td>{{ s.flag }}</td>
+                  <td class="r">{{ fmtInt(s.src) }}</td>
+                  <td class="r">{{ fmtInt(s.dst) }}</td>
+                  <td>
+                    <span class="chip" [class.attack]="isAttack(s)" [class.normal]="!isAttack(s)">{{ s.label }}</span>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
 
-      <button class="key" (click)="pressDigit('4')">4</button>
-      <button class="key" (click)="pressDigit('5')">5</button>
-      <button class="key" (click)="pressDigit('6')">6</button>
-      <button class="key op" [class.active]="isActive('subtract')" (click)="pressOperator('subtract')">&minus;</button>
+        <p class="note" [class.attack]="isAttack(currentSample())" aria-live="polite">
+          <strong>{{ isAttack(currentSample()) ? 'Attack.' : 'Normal.' }}</strong>
+          {{ currentSample().note }}
+        </p>
+        <dl class="legend">
+          <div><dt>SF</dt><dd>connection opened and closed normally</dd></div>
+          <div><dt>S0</dt><dd>connection attempt seen, no reply</dd></div>
+        </dl>
+        <p class="fine">Select a row to see what it means. Labels come from the dataset, not from our models.</p>
+      </div>
+    </div>
+  </section>
 
-      <button class="key" (click)="pressDigit('1')">1</button>
-      <button class="key" (click)="pressDigit('2')">2</button>
-      <button class="key" (click)="pressDigit('3')">3</button>
-      <button class="key op" [class.active]="isActive('add')" (click)="pressOperator('add')">+</button>
+  <!-- ============ Data ============ -->
+  <section class="block" id="about">
+    <div class="wrap split">
+      <div class="side">
+        <h2>What the data looks like</h2>
+        <p>NSL-KDD, a standard benchmark for network intrusion detection.</p>
+      </div>
+      <div class="main">
+        <p>
+          Each row is one network connection described by 41 measurements: how long it lasted, which
+          protocol and service it used, how many bytes moved each way, how many errors occurred, and so
+          on. The dataset has {{ fmtInt(total) }} rows, 125,973 from the official training file and 22,544
+          from the official test file.
+        </p>
 
-      <button class="key" (click)="toggleSign()">&plusmn;</button>
-      <button class="key" (click)="pressDigit('0')">0</button>
-      <button class="key" (click)="pressDecimal()">.</button>
-      <button class="key op" (click)="pressEquals()">=</button>
+        <div role="img" [attr.aria-label]="'Normal ' + pct(normalPct) + ', attack ' + pct(attackPct)">
+          <div class="balance-bar">
+            <span class="seg normal" [style.width.%]="normalPct"></span>
+            <span class="seg attack" [style.width.%]="attackPct"></span>
+          </div>
+          <div class="balance-legend">
+            <span><i class="swatch normal"></i>Normal {{ fmtInt(normalCount) }} ({{ pct(normalPct) }})</span>
+            <span><i class="swatch attack"></i>Attack {{ fmtInt(attackCount) }} ({{ pct(attackPct) }})</span>
+          </div>
+        </div>
+
+        <h3>Attack families in the data</h3>
+        <dl class="families">
+          <div><dt>DoS</dt><dd>Floods a server with requests until it stops responding.</dd></div>
+          <div><dt>Probe</dt><dd>Scans a network to find weak spots before attacking.</dd></div>
+          <div><dt>R2L</dt><dd>An outsider tries to get access to a machine, for example by guessing passwords.</dd></div>
+          <div><dt>U2R</dt><dd>A normal user tries to gain administrator rights.</dd></div>
+        </dl>
+        <p>This project treats all four as a single class: attack.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Method ============ -->
+  <section class="block" id="method">
+    <div class="wrap split">
+      <div class="side">
+        <h2>How the models were built</h2>
+        <p>We followed the reference paper step by step so the numbers can be compared.</p>
+      </div>
+      <div class="main">
+        <ol class="steps">
+          @for (s of steps; track s.title) {
+            <li>
+              <div>
+                <h3>{{ s.title }}</h3>
+                <p>{{ s.text }}</p>
+              </div>
+            </li>
+          }
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Results ============ -->
+  <section class="block" id="results">
+    <div class="wrap split">
+      <div class="side">
+        <h2>How well they do</h2>
+        <p>
+          Our Decision Tree and Random Forest land within about 0.3 points of the paper’s. XGBoost, which
+          the paper did not use, beats our own two models but not the paper’s Random Forest.
+        </p>
+        <div class="picker" role="group" aria-label="Choose a model">
+          @for (m of ours(); track m.name; let i = $index) {
+            <button
+              type="button"
+              class="pick"
+              [class.on]="i === selectedModel()"
+              [attr.aria-pressed]="i === selectedModel()"
+              (click)="selectedModel.set(i)"
+            >
+              <span>{{ m.name }}</span>
+              <span class="num">{{ fmt(m.accuracy) }}%</span>
+            </button>
+          }
+        </div>
+      </div>
+
+      <div class="main">
+        <h3 class="first">{{ model().name }}</h3>
+        <p class="muted">{{ referenceNote() }}</p>
+
+        @for (m of metrics; track m.key) {
+          <div class="metric">
+            <div class="metric-top">
+              <span>{{ m.label }}</span>
+              <span class="num">{{ fmt(model()[m.key]) }}%</span>
+            </div>
+            <span class="track">
+              <span class="fill" [style.width.%]="bar(model()[m.key])"></span>
+              <span class="mark" [style.left.%]="bar(reference()[m.key])" title="Paper"></span>
+            </span>
+            <p class="metric-foot">{{ compare(model()[m.key], reference()[m.key]) }}</p>
+          </div>
+        }
+        <p class="fine">Bars are zoomed to the 98 to 100% range. The dark tick marks the paper’s value.</p>
+
+        <h3>All results side by side</h3>
+        <div class="tbl-wrap">
+          <table class="scores">
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>Accuracy</th>
+                <th>Precision</th>
+                <th>Recall</th>
+                <th>F1 score</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (r of results(); track r.name) {
+                <tr [class.paper]="r.source === 'paper'">
+                  <td>{{ r.name }}</td>
+                  <td class="num" [class.best]="r.accuracy === best().accuracy">{{ fmt(r.accuracy) }}</td>
+                  <td class="num" [class.best]="r.precision === best().precision">{{ fmt(r.precision) }}</td>
+                  <td class="num" [class.best]="r.recall === best().recall">{{ fmt(r.recall) }}</td>
+                  <td class="num" [class.best]="r.f1 === best().f1">{{ fmt(r.f1) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <p class="fine">All scores are percentages from one random 80/20 split. The underlined score is the best in its column.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Gap ============ -->
+  <section class="block" id="gap">
+    <div class="wrap split">
+      <div class="side">
+        <h2>Where the paper’s test falls short</h2>
+        <p>The paper reports one random split of the merged data. We tested two things it did not.</p>
+      </div>
+      <div class="main">
+        <p>
+          First, we repeated the test five times on different parts of the data (5-fold cross-validation).
+          Second, we trained on the official training file and tested on the official test file, which
+          contains attack types the training file never shows.
+        </p>
+
+        @for (g of gapCards; track g.model) {
+          <div class="gap">
+            <h3>{{ g.model }}</h3>
+            @for (b of g.bars; track b.label) {
+              <div class="gap-row">
+                <span class="gap-label">{{ b.label }}</span>
+                <span class="track"><span class="fill" [class.danger]="b.danger" [style.width.%]="b.value"></span></span>
+                <span class="num gap-val">{{ b.text }}</span>
+              </div>
+            }
+          </div>
+        }
+
+        <p class="callout">
+          Accuracy stays near 99% however the data is shuffled, then drops by about {{ dropText }} points on
+          the official test file. We think similar records landing on both sides of a random split make it
+          too easy, but we did not test that.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Shipping ============ -->
+  <section class="block" id="ship">
+    <div class="wrap split">
+      <div class="side">
+        <h2>How a change reaches this page</h2>
+        <p>Every push to main runs the pipeline. If a check fails, nothing is published.</p>
+      </div>
+      <div class="main">
+        <ol class="flow">
+          @for (f of flow; track f.title) {
+            <li>
+              <h3>{{ f.title }}</h3>
+              <p>{{ f.text }}</p>
+            </li>
+          }
+        </ol>
+
+        <dl class="facts">
+          <div><dt>This page</dt><dd class="num">{{ version }}</dd></div>
+          <div><dt>Backend</dt><dd>{{ apiLabel() }}</dd></div>
+          <div><dt>Results come from</dt><dd>{{ dataSource() === 'api' ? 'the Flask API' : 'the page itself' }}</dd></div>
+        </dl>
+        <p class="fine">{{ apiNote() }}</p>
+      </div>
     </div>
   </section>
 </main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p>
+      Reference paper: Avcı and Koca (2023), Cybersecurity Attack Detection Model, Using Machine Learning
+      Techniques. Acta Polytechnica Hungarica 20(7).
+    </p>
+    <p>Dataset: NSL-KDD, Canadian Institute for Cybersecurity, University of New Brunswick.</p>
+    <p>DevOps lab, Air University, Islamabad.</p>
+  </div>
+</footer>

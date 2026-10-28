@@ -3,35 +3,41 @@ import unittest
 from app import app
 
 
-class CalculatorTests(unittest.TestCase):
+class ApiTests(unittest.TestCase):
     def setUp(self):
         self.client = app.test_client()
 
-    def post(self, a, b, operation):
-        return self.client.post(
-            "/calculate", json={"a": a, "b": b, "operation": operation}
-        )
+    def test_home_reports_ok(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["status"], "ok")
 
-    def test_add(self):
-        self.assertEqual(self.post(2, 3, "add").get_json()["result"], 5)
+    def test_results_returns_six_models(self):
+        response = self.client.get("/api/results")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.get_json()["models"]), 6)
 
-    def test_subtract(self):
-        self.assertEqual(self.post(5, 3, "subtract").get_json()["result"], 2)
+    def test_every_model_has_all_metrics(self):
+        for model in self.client.get("/api/results").get_json()["models"]:
+            for key in ("name", "short", "source", "accuracy", "precision", "recall", "f1"):
+                self.assertIn(key, model)
 
-    def test_multiply(self):
-        self.assertEqual(self.post(4, 3, "multiply").get_json()["result"], 12)
+    def test_scores_are_valid_percentages(self):
+        for model in self.client.get("/api/results").get_json()["models"]:
+            for key in ("accuracy", "precision", "recall", "f1"):
+                self.assertGreaterEqual(model[key], 0)
+                self.assertLessEqual(model[key], 100)
 
-    def test_divide(self):
-        self.assertEqual(self.post(10, 4, "divide").get_json()["result"], 2.5)
+    def test_ours_and_paper_rows_both_present(self):
+        sources = {m["source"] for m in self.client.get("/api/results").get_json()["models"]}
+        self.assertEqual(sources, {"ours", "paper"})
 
-    def test_divide_by_zero(self):
-        self.assertEqual(self.post(1, 0, "divide").status_code, 400)
+    def test_cors_header_lets_the_pages_site_read_the_answer(self):
+        response = self.client.get("/api/results")
+        self.assertEqual(response.headers["Access-Control-Allow-Origin"], "*")
 
-    def test_bad_input(self):
-        self.assertEqual(self.post("x", 1, "add").status_code, 400)
-
-    def test_unknown_operation(self):
-        self.assertEqual(self.post(1, 1, "power").status_code, 400)
+    def test_unknown_route_returns_404(self):
+        self.assertEqual(self.client.get("/nope").status_code, 404)
 
 
 if __name__ == "__main__":

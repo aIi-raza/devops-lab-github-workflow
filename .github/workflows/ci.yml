@@ -56,3 +56,5 @@ jobs:
 
       - name: Verify build is successful
         run: test -f dist/frontend/browser/index.html
+
+# Runs backend tests and the Angular build on every push and pull request

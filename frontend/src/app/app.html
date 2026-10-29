@@ -1,299 +1,189 @@
-<header class="bar">
-  <div class="wrap bar-inner">
-    <button type="button" class="brand" (click)="top()">
-      <span class="brand-mark" aria-hidden="true"></span>
-      NSL-KDD detector
-    </button>
+<div class="app-shell" [attr.data-theme]="theme()">
+  <header class="topbar" [class.scrolled]="scrolled()">
+    <a class="brand" href="#top" aria-label="NSL-KDD Workbench home">
+      <img class="brand-logo" src="assets/nslkdd-mark.svg" alt="">
+      <span class="brand-text"><strong>NSL-KDD <span>Workbench</span></strong><small>INTRUSION DETECTION · ML LAB</small></span>
+    </a>
 
-    <nav class="nav" aria-label="Page sections">
-      @for (s of sections; track s.id) {
-        <button type="button" class="nav-link" (click)="go(s.id)">{{ s.label }}</button>
-      }
+    <nav class="top-nav" aria-label="Main navigation">
+      <button type="button" [class.active]="activeView() === 'single'" (click)="navigate('single')"><span class="material-symbols-rounded" aria-hidden="true">tune</span> Single prediction</button>
+      <button type="button" [class.active]="activeView() === 'batch'" (click)="navigate('batch')"><span class="material-symbols-rounded" aria-hidden="true">table_view</span> CSV analysis</button>
+      <button type="button" [class.active]="activeView() === 'comparison'" (click)="navigate('comparison')"><span class="material-symbols-rounded" aria-hidden="true">compare_arrows</span> Model comparison</button>
     </nav>
 
-    <p
-      class="status"
-      [class.is-online]="apiState() === 'online'"
-      [class.is-offline]="apiState() === 'offline'"
-      [attr.title]="apiNote()"
-    >
-      <span class="dot" aria-hidden="true"></span>
-      {{ apiLabel() }}
-      <span class="ver num">{{ version }}</span>
-    </p>
-  </div>
-</header>
-
-<main>
-  <!-- ============ Hero ============ -->
-  <section class="hero">
-    <div class="wrap hero-grid">
-      <div>
-        <!-- DEMO EDIT POINT (HTML): change the heading text below, commit and push -->
-        <h1>Is this network connection an attack?</h1>
-        <p class="lead">
-          We trained models on 148,517 recorded connections to answer that question, then checked our
-          results against a published research paper.
-        </p>
-        <button type="button" class="cta" (click)="go('results')">See the results</button>
+    <div class="top-actions">
+      <div class="api-status" [class.online]="apiState() === 'online'" [class.offline]="apiState() === 'offline'" [title]="apiLabel()">
+        <span class="status-dot"></span><span>{{ apiLabel() }}</span>
       </div>
-
-      <div>
-        <p class="cap">The first five rows of the training file (sizes in bytes)</p>
-        <div class="ledger-box">
-          <table class="ledger" aria-label="Five example network connections">
-            <thead>
-              <tr>
-                <th>Protocol</th>
-                <th>Service</th>
-                <th>Flag</th>
-                <th class="r">Sent</th>
-                <th class="r">Received</th>
-                <th>Label</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (s of samples; track $index; let i = $index) {
-                <tr
-                  tabindex="0"
-                  [class.on]="i === selectedRow()"
-                  [style.--d]="i * 120 + 'ms'"
-                  (click)="selectedRow.set(i)"
-                  (keydown.enter)="selectedRow.set(i)"
-                  (keydown.space)="selectedRow.set(i); $event.preventDefault()"
-                >
-                  <td>{{ s.protocol }}</td>
-                  <td>{{ s.service }}</td>
-                  <td>{{ s.flag }}</td>
-                  <td class="r">{{ fmtInt(s.src) }}</td>
-                  <td class="r">{{ fmtInt(s.dst) }}</td>
-                  <td>
-                    <span class="chip" [class.attack]="isAttack(s)" [class.normal]="!isAttack(s)">{{ s.label }}</span>
-                  </td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-
-        <p class="note" [class.attack]="isAttack(currentSample())" aria-live="polite">
-          <strong>{{ isAttack(currentSample()) ? 'Attack.' : 'Normal.' }}</strong>
-          {{ currentSample().note }}
-        </p>
-        <dl class="legend">
-          <div><dt>SF</dt><dd>connection opened and closed normally</dd></div>
-          <div><dt>S0</dt><dd>connection attempt seen, no reply</dd></div>
-        </dl>
-        <p class="fine">Select a row to see what it means. Labels come from the dataset, not from our models.</p>
-      </div>
+      <button class="theme-toggle" type="button" (click)="toggleTheme()" [attr.aria-label]="theme() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'">
+        <span class="material-symbols-rounded" aria-hidden="true">{{ theme() === 'dark' ? 'light_mode' : 'dark_mode' }}</span>
+        
+      </button>
     </div>
-  </section>
+  </header>
 
-  <!-- ============ Data ============ -->
-  <section class="block" id="about">
-    <div class="wrap split">
-      <div class="side">
-        <h2>What the data looks like</h2>
-        <p>NSL-KDD, a standard benchmark for network intrusion detection.</p>
+  <main id="top" class="page-wrap">
+    <section class="hero-row">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="eyebrow-line"></span> MACHINE LEARNING · NSL-KDD DATASET</div>
+        <h1>Explore traffic.<br /><span>Test detection models.</span></h1>
+        <p>Run trained classifiers against NSL-KDD-compatible connection records. Use a guided form for one record or analyze a CSV batch.</p>
+        <div class="hero-pills"><span><span class="material-symbols-rounded" aria-hidden="true">model_training</span> 4 trained models</span><span><span class="material-symbols-rounded" aria-hidden="true">dataset</span> 25 selected features</span><span><span class="material-symbols-rounded" aria-hidden="true">science</span> Research prototype</span></div>
       </div>
-      <div class="main">
-        <p>
-          Each row is one network connection described by 41 measurements: how long it lasted, which
-          protocol and service it used, how many bytes moved each way, how many errors occurred, and so
-          on. The dataset has {{ fmtInt(total) }} rows, 125,973 from the official training file and 22,544
-          from the official test file.
-        </p>
+      <aside class="hero-note">
+        <span class="note-icon material-symbols-rounded" aria-hidden="true">info</span>
+        <div><strong>What this tool does</strong><p>It classifies supplied records using saved NSL-KDD-trained models. It does not capture live traffic or replace production security monitoring.</p></div>
+      </aside>
+    </section>
 
-        <div role="img" [attr.aria-label]="'Normal ' + pct(normalPct) + ', attack ' + pct(attackPct)">
-          <div class="balance-bar">
-            <span class="seg normal" [style.width.%]="normalPct"></span>
-            <span class="seg attack" [style.width.%]="attackPct"></span>
-          </div>
-          <div class="balance-legend">
-            <span><i class="swatch normal"></i>Normal {{ fmtInt(normalCount) }} ({{ pct(normalPct) }})</span>
-            <span><i class="swatch attack"></i>Attack {{ fmtInt(attackCount) }} ({{ pct(attackPct) }})</span>
-          </div>
-        </div>
+    @if (apiState() === 'offline' || inferenceModels().length === 0) {
+      <section class="service-alert" role="status">
+        <span class="material-symbols-rounded" aria-hidden="true">cloud_off</span>
+        <div><strong>Prediction API unavailable</strong><p>Start the Flask backend and confirm that trained model artifacts are available. The interface will not invent predictions when the API is offline.</p><code>python app.py</code></div>
+        <button type="button" class="button button-secondary" (click)="loadInferenceModels()"><span class="material-symbols-rounded" aria-hidden="true">refresh</span> Retry connection</button>
+      </section>
+    }
 
-        <h3>Attack families in the data</h3>
-        <dl class="families">
-          <div><dt>DoS</dt><dd>Floods a server with requests until it stops responding.</dd></div>
-          <div><dt>Probe</dt><dd>Scans a network to find weak spots before attacking.</dd></div>
-          <div><dt>R2L</dt><dd>An outsider tries to get access to a machine, for example by guessing passwords.</dd></div>
-          <div><dt>U2R</dt><dd>A normal user tries to gain administrator rights.</dd></div>
-        </dl>
-        <p>This project treats all four as a single class: attack.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ Method ============ -->
-  <section class="block" id="method">
-    <div class="wrap split">
-      <div class="side">
-        <h2>How the models were built</h2>
-        <p>We followed the reference paper step by step so the numbers can be compared.</p>
-      </div>
-      <div class="main">
-        <ol class="steps">
-          @for (s of steps; track s.title) {
-            <li>
-              <div>
-                <h3>{{ s.title }}</h3>
-                <p>{{ s.text }}</p>
-              </div>
-            </li>
-          }
-        </ol>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ Results ============ -->
-  <section class="block" id="results">
-    <div class="wrap split">
-      <div class="side">
-        <h2>How well they do</h2>
-        <p>
-          Our Decision Tree and Random Forest land within about 0.3 points of the paper’s. XGBoost, which
-          the paper did not use, beats our own two models but not the paper’s Random Forest.
-        </p>
-        <div class="picker" role="group" aria-label="Choose a model">
-          @for (m of ours(); track m.name; let i = $index) {
-            <button
-              type="button"
-              class="pick"
-              [class.on]="i === selectedModel()"
-              [attr.aria-pressed]="i === selectedModel()"
-              (click)="selectedModel.set(i)"
-            >
-              <span>{{ m.name }}</span>
-              <span class="num">{{ fmt(m.accuracy) }}%</span>
-            </button>
-          }
+    <section class="workspace-card" id="workspace">
+      <div class="workspace-heading">
+        <div><div class="section-kicker">PREDICTION WORKSPACE</div><h2>Prediction workspace</h2><p>Run a single-record prediction or analyze a CSV batch.</p></div>
+        <div class="model-picker" [class.disabled]="inferenceModels().length === 0">
+          <span class="material-symbols-rounded model-picker-icon" aria-hidden="true">neurology</span>
+          <span class="model-picker-copy"><small>ACTIVE MODEL</small><strong>{{ modelName(selectedModel()) }}</strong></span>
+          <span class="material-symbols-rounded picker-chevron" aria-hidden="true">expand_more</span>
+          <select aria-label="Choose active model" [value]="selectedModel()" (change)="selectedModel.set($any($event.target).value)" [disabled]="inferenceModels().length === 0">
+            @for (model of inferenceModels(); track model.id) { <option [value]="model.id">{{ model.name }}</option> }
+          </select>
         </div>
       </div>
 
-      <div class="main">
-        <h3 class="first">{{ model().name }}</h3>
-        <p class="muted">{{ referenceNote() }}</p>
-
-        @for (m of metrics; track m.key) {
-          <div class="metric">
-            <div class="metric-top">
-              <span>{{ m.label }}</span>
-              <span class="num">{{ fmt(model()[m.key]) }}%</span>
+      @if (activeView() === 'single') {
+      <section class="workflow-section single-workflow" id="predict">
+        <div class="workflow-section-heading"><div><div class="section-kicker">SINGLE RECORD</div><h2>Test one connection</h2><p>Use a preset or enter all required NSL-KDD features.</p></div></div>
+          <div class="scenario-bar">
+            <div><strong>Start with an example</strong><p>Load a preset, inspect its values, then run the selected model.</p></div>
+            <div class="scenario-buttons">
+              <button type="button" [class.selected]="selectedScenario() === 'normal'" (click)="useScenario('normal')"><span class="material-symbols-rounded" aria-hidden="true">check_circle</span> Normal example</button>
+              <button type="button" [class.selected]="selectedScenario() === 'dos'" (click)="useScenario('dos')"><span class="material-symbols-rounded" aria-hidden="true">warning</span> DoS-like example</button>
+              <button type="button" [class.selected]="selectedScenario() === 'udp'" (click)="useScenario('udp')"><span class="material-symbols-rounded" aria-hidden="true">swap_horiz</span> UDP example</button>
             </div>
-            <span class="track">
-              <span class="fill" [style.width.%]="bar(model()[m.key])"></span>
-              <span class="mark" [style.left.%]="bar(reference()[m.key])" title="Paper"></span>
-            </span>
-            <p class="metric-foot">{{ compare(model()[m.key], reference()[m.key]) }}</p>
           </div>
-        }
-        <p class="fine">Bars are zoomed to the 98 to 100% range. The dark tick marks the paper’s value.</p>
+          <div class="scenario-description"><span class="material-symbols-rounded" aria-hidden="true">info</span>{{ scenarios[selectedScenario()].description }}</div>
 
-        <h3>All results side by side</h3>
-        <div class="tbl-wrap">
-          <table class="scores">
-            <thead>
-              <tr>
-                <th>Model</th>
-                <th>Accuracy</th>
-                <th>Precision</th>
-                <th>Recall</th>
-                <th>F1 score</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (r of results(); track r.name) {
-                <tr [class.paper]="r.source === 'paper'">
-                  <td>{{ r.name }}</td>
-                  <td class="num" [class.best]="r.accuracy === best().accuracy">{{ fmt(r.accuracy) }}</td>
-                  <td class="num" [class.best]="r.precision === best().precision">{{ fmt(r.precision) }}</td>
-                  <td class="num" [class.best]="r.recall === best().recall">{{ fmt(r.recall) }}</td>
-                  <td class="num" [class.best]="r.f1 === best().f1">{{ fmt(r.f1) }}</td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-        <p class="fine">All scores are percentages from one random 80/20 split. The underlined score is the best in its column.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ Gap ============ -->
-  <section class="block" id="gap">
-    <div class="wrap split">
-      <div class="side">
-        <h2>Where the paper’s test falls short</h2>
-        <p>The paper reports one random split of the merged data. We tested two things it did not.</p>
-      </div>
-      <div class="main">
-        <p>
-          First, we repeated the test five times on different parts of the data (5-fold cross-validation).
-          Second, we trained on the official training file and tested on the official test file, which
-          contains attack types the training file never shows.
-        </p>
-
-        @for (g of gapCards; track g.model) {
-          <div class="gap">
-            <h3>{{ g.model }}</h3>
-            @for (b of g.bars; track b.label) {
-              <div class="gap-row">
-                <span class="gap-label">{{ b.label }}</span>
-                <span class="track"><span class="fill" [class.danger]="b.danger" [style.width.%]="b.value"></span></span>
-                <span class="num gap-val">{{ b.text }}</span>
-              </div>
+          <form class="feature-form" (submit)="$event.preventDefault(); runSinglePrediction()">
+            @for (group of featureGroups; track group.title) {
+              <section class="feature-group">
+                <div class="feature-group-heading"><span class="group-mark"></span><div><h3>{{ group.title }}</h3><p>{{ group.description }}</p></div></div>
+                <div class="field-grid">
+                  @for (field of group.fields; track field.key) {
+                    <label class="feature-field" [class.wide-field]="field.kind === 'select' && field.key === 'service'">
+                      <span class="feature-label">{{ field.label }}</span>
+                      @if (field.kind === 'select') {
+                        <span class="input-wrap"><select [value]="featureValue(field.key)" (change)="setFeature(field.key, $event)">@for (option of field.options ?? []; track option.value) { <option [value]="option.value">{{ option.label }}</option> }</select><span class="material-symbols-rounded" aria-hidden="true">expand_more</span></span>
+                      } @else {
+                        <input [value]="featureValue(field.key)" (input)="setFeature(field.key, $event)" type="number" min="0" [max]="field.rate ? 1 : null" [step]="field.rate ? '0.01' : '1'" [attr.aria-label]="field.label" />
+                      }
+                      <small>{{ field.hint }}</small>
+                    </label>
+                  }
+                </div>
+              </section>
             }
-          </div>
-        }
+            <div class="form-actions">
+              <p><span class="material-symbols-rounded" aria-hidden="true">fact_check</span> {{ totalFeatures }} required features · categorical values are encoded by the backend</p>
+              <button class="button button-primary" type="submit" [disabled]="singleBusy() || inferenceModels().length === 0"><span class="material-symbols-rounded" aria-hidden="true">{{ singleBusy() ? 'progress_activity' : 'play_arrow' }}</span>{{ singleBusy() ? 'Predicting…' : 'Predict connection' }}<span class="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>
+            </div>
+          </form>
 
-        <p class="callout">
-          Accuracy stays near 99% however the data is shuffled, then drops by about {{ dropText }} points on
-          the official test file. We think similar records landing on both sides of a random split make it
-          too easy, but we did not test that.
-        </p>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ Shipping ============ -->
-  <section class="block" id="ship">
-    <div class="wrap split">
-      <div class="side">
-        <h2>How a change reaches this page</h2>
-        <p>Every push to main runs the pipeline. If a check fails, nothing is published.</p>
-      </div>
-      <div class="main">
-        <ol class="flow">
-          @for (f of flow; track f.title) {
-            <li>
-              <h3>{{ f.title }}</h3>
-              <p>{{ f.text }}</p>
-            </li>
+          @if (singleError()) { <div class="inline-alert error-alert" role="alert"><span class="material-symbols-rounded" aria-hidden="true">error</span><p>{{ singleError() }}</p></div> }
+          @if (singleResult(); as result) {
+            <section class="single-result-card" aria-live="polite">
+              <div class="result-status-icon" [class.attack-result]="result.predicted_class === 1"><span class="material-symbols-rounded" aria-hidden="true">{{ result.predicted_class === 1 ? 'gpp_maybe' : 'verified_user' }}</span></div>
+              <div class="single-result-main"><div class="section-kicker">MODEL PREDICTION</div><h3 [class.attack-text]="result.predicted_class === 1">{{ result.prediction }} traffic</h3><p>Class {{ result.predicted_class }} · {{ modelName(selectedModel()) }} · NSL-KDD feature schema</p></div>
+              @if (result.probabilities) { <div class="probability-pair"><div><span>Normal probability</span><strong>{{ (result.probabilities.Normal * 100).toFixed(2) }}%</strong></div><div><span>Attack probability</span><strong>{{ (result.probabilities.Attack * 100).toFixed(2) }}%</strong></div></div> }
+              <p class="result-disclaimer">This is the selected model's classification for the supplied feature values—not a verified security verdict.</p>
+            </section>
           }
-        </ol>
+      </section>
+      }
+      @if (activeView() === 'batch') {
+      <section class="workflow-section batch-workflow" id="batch">
+        <div class="workflow-section-heading"><div><div class="section-kicker">BATCH ANALYSIS</div><h2>Analyze a CSV dataset</h2><p>Upload your own compatible records or load one of the included samples.</p></div></div>
+          <div class="batch-layout">
+            <div class="upload-column">
+              <div class="batch-intro"><span class="material-symbols-rounded" aria-hidden="true">upload_file</span><div><h3>Upload a raw-feature CSV</h3><p>Use NSL-KDD feature names and original categorical values. Do not upload a preprocessed numeric file.</p></div></div>
+              <label class="dropzone" for="csv-upload" [class.has-file]="!!selectedCsv()" (dragover)="$event.preventDefault()" (drop)="dropCsv($event)">
+                <input id="csv-upload" type="file" accept=".csv,text/csv" (change)="chooseCsv($event)" />
+                <span class="material-symbols-rounded upload-icon" aria-hidden="true">cloud_upload</span>
+                @if (selectedCsv(); as file) { <strong>{{ file.name }}</strong><span>{{ (file.size / 1024).toFixed(1) }} KB · ready to analyze</span><span class="browse-text">Choose another file</span> }
+                @else { <strong>Drop your CSV here</strong><span>or <span class="browse-text">browse files</span> on your device</span><small>CSV only · up to 5 MB · maximum 5,000 rows</small> }
+              </label>
+              <div class="format-callout"><span class="material-symbols-rounded" aria-hidden="true">description</span><div><strong>Required file structure</strong><p>25 selected feature columns. An optional <code>actual_label</code> column can contain <code>Normal</code>/<code>Attack</code> or <code>0</code>/<code>1</code>.</p></div></div>
+              @if (csvError()) { <div class="inline-alert error-alert" role="alert"><span class="material-symbols-rounded" aria-hidden="true">error</span><p>{{ csvError() }}</p></div> }
+              <div class="batch-actions">
+                <button class="button button-primary" type="button" [disabled]="csvBusy() || !selectedCsv() || inferenceModels().length === 0" (click)="runCsvPrediction()"><span class="material-symbols-rounded" aria-hidden="true">{{ csvBusy() ? 'progress_activity' : 'play_arrow' }}</span>{{ csvBusy() ? 'Analyzing CSV…' : 'Analyze with selected model' }}<span class="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>
+              </div>
+            </div>
 
-        <dl class="facts">
-          <div><dt>This page</dt><dd class="num">{{ version }}</dd></div>
-          <div><dt>Backend</dt><dd>{{ apiLabel() }}</dd></div>
-          <div><dt>Results come from</dt><dd>{{ dataSource() === 'api' ? 'the Flask API' : 'the page itself' }}</dd></div>
-        </dl>
-        <p class="fine">{{ apiNote() }}</p>
-      </div>
-    </div>
-  </section>
-</main>
+            <aside class="sample-column" id="samples">
+              <div class="sample-heading"><div><div class="section-kicker">QUICK START</div><h3>Load a sample</h3><p>Prefill the uploader with included NSL-KDD-style records.</p></div><a class="button button-secondary compact-button" href="samples/sample_mixed.csv" download><span class="material-symbols-rounded" aria-hidden="true">download</span> Download example CSV</a></div>
+              <div class="sample-card-list">
+                <article class="sample-card"><span class="sample-icon normal-icon material-symbols-rounded" aria-hidden="true">check_circle</span><div><strong>Normal traffic</strong><small>sample_normal.csv</small><div class="sample-card-actions"><button type="button" (click)="loadSampleCsv('sample_normal.csv')">Load sample</button></div></div></article>
+                <article class="sample-card"><span class="sample-icon attack-icon material-symbols-rounded" aria-hidden="true">warning</span><div><strong>Attack traffic</strong><small>sample_attack.csv</small><div class="sample-card-actions"><button type="button" (click)="loadSampleCsv('sample_attack.csv')">Load sample</button></div></div></article>
+                <article class="sample-card"><span class="sample-icon mixed-icon material-symbols-rounded" aria-hidden="true">dataset</span><div><strong>Mixed records</strong><small>sample_mixed.csv</small><div class="sample-card-actions"><button type="button" (click)="loadSampleCsv('sample_mixed.csv')">Load sample</button></div></div></article>
+              </div>
+              <div class="sample-footnote"><span class="material-symbols-rounded" aria-hidden="true">info</span><p>Samples are for demonstrating the workflow, not for estimating real-world detection performance. Uploaded files are sent to the configured Flask API.</p></div>
+            </aside>
+          </div>
 
-<footer class="foot">
-  <div class="wrap">
-    <p>
-      Reference paper: Avcı and Koca (2023), Cybersecurity Attack Detection Model, Using Machine Learning
-      Techniques. Acta Polytechnica Hungarica 20(7).
-    </p>
-    <p>Dataset: NSL-KDD, Canadian Institute for Cybersecurity, University of New Brunswick.</p>
-    <p>DevOps lab, Air University, Islamabad.</p>
-  </div>
-</footer>
+          @if (csvResult(); as result) {
+            <section class="output-section" aria-live="polite">
+              <div class="output-heading"><div><div class="section-kicker">BATCH RESULTS</div><h3>Prediction summary</h3><p>{{ result.total_records }} records · {{ modelName(result.model) }}</p></div><button class="button button-secondary compact-button" type="button" (click)="downloadCsvResults()"><span class="material-symbols-rounded" aria-hidden="true">download</span> Export predictions</button></div>
+              <div class="summary-grid"><div class="summary-card"><span>Total records</span><strong>{{ result.total_records }}</strong><small>Rows processed</small></div><div class="summary-card normal-summary"><span>Normal predictions</span><strong>{{ result.normal_count }}</strong><small>{{ result.total_records ? (result.normal_count / result.total_records * 100).toFixed(1) : '0.0' }}% of records</small></div><div class="summary-card attack-summary"><span>Attack predictions</span><strong>{{ result.attack_count }}</strong><small>{{ result.total_records ? (result.attack_count / result.total_records * 100).toFixed(1) : '0.0' }}% of records</small></div></div>
+              @if (result.metrics) { <div class="evaluation-panel"><div><span class="material-symbols-rounded" aria-hidden="true">query_stats</span><div><strong>Evaluation against supplied labels</strong><p>These metrics describe only this uploaded file, not generalization to unseen traffic.</p></div></div><div class="metric-strip"><span>Accuracy <strong>{{ formatPercent(result.metrics.accuracy) }}</strong></span><span>Precision <strong>{{ formatPercent(result.metrics.precision) }}</strong></span><span>Recall <strong>{{ formatPercent(result.metrics.recall) }}</strong></span><span>F1 score <strong>{{ formatPercent(result.metrics.f1) }}</strong></span></div></div> }
+              @else { <div class="neutral-note"><span class="material-symbols-rounded" aria-hidden="true">info</span> No ground-truth labels were found. Predictions are shown, but evaluation metrics cannot be calculated.</div> }
+              <div class="table-heading"><div><h4>Record-level predictions</h4><p>Showing up to 100 records in the page; export contains all processed rows.</p></div></div>
+              <div class="table-scroll"><table class="results-table"><thead><tr><th>Row</th><th>Prediction</th><th>Actual label</th><th>Model probability</th></tr></thead><tbody>@for (record of visibleRecords(); track record.row) { <tr><td>{{ record.row }}</td><td><span class="prediction-badge" [class.badge-attack]="record.predicted_class === 1" [class.badge-normal]="record.predicted_class === 0"><span class="status-dot"></span>{{ record.prediction }}</span></td><td>{{ displayedLabel(record.actual_label) }}</td><td>@if (record.probabilities) { <div class="probability-cell"><span>{{ (maxProbability(record.probabilities) * 100).toFixed(1) }}%</span><div><i [style.width.%]="maxProbability(record.probabilities) * 100"></i></div></div> } @else { <span class="muted-value">—</span> }</td></tr> }</tbody></table></div>
+            </section>
+          }
+
+
+      </section>
+      }
+
+      @if (activeView() === 'comparison') {
+        <section class="workflow-section comparison-workflow" id="comparison">
+          <div class="workflow-section-heading"><div><div class="section-kicker">MODEL EVALUATION</div><h2>Compare trained models</h2><p>Run 2–3 available models against the same selected CSV and compare their outputs.</p></div></div>
+          <div class="comparison-picker" aria-label="Choose models to compare">
+            <div><strong>Models to compare</strong><small>Select at least two and no more than three trained models.</small></div>
+            <div class="comparison-options">@for (model of inferenceModels(); track model.id) { <label><input type="checkbox" [checked]="selectedComparisonModels().includes(model.id)" [disabled]="!selectedComparisonModels().includes(model.id) && selectedComparisonModels().length >= 3" (change)="toggleComparisonModel(model.id, $any($event.target).checked)"><span>{{ model.name }}</span></label> }</div>
+          </div>
+          <div class="comparison-source">
+            <div class="comparison-file-info"><strong>Comparison dataset</strong><p>{{ selectedCsv()?.name ?? 'No CSV selected yet' }}</p><small>Select a CSV here or in CSV Analysis. Your selection is retained when switching views.</small></div>
+            <label class="button button-secondary comparison-file-button" for="comparison-csv-upload"><span class="material-symbols-rounded" aria-hidden="true">upload_file</span> Choose CSV
+              <input id="comparison-csv-upload" class="visually-hidden-file" type="file" accept=".csv,text/csv" (change)="chooseCsv($event)" />
+            </label>
+            <button class="button button-primary" type="button" [disabled]="comparisonBusy() || !selectedCsv() || inferenceModels().length === 0" (click)="compareModels()"><span class="material-symbols-rounded" aria-hidden="true">{{ comparisonBusy() ? 'progress_activity' : 'compare_arrows' }}</span>{{ comparisonBusy() ? 'Comparing models…' : 'Run comparison' }}</button>
+          </div>
+          @if (comparisonError()) { <div class="inline-alert error-alert" role="alert"><span class="material-symbols-rounded" aria-hidden="true">error</span><p>{{ comparisonError() }}</p></div> }
+                    @if (comparisonResults(); as comparisons) {
+            <section class="comparison-section" aria-live="polite">
+              <div class="output-heading"><div><div class="section-kicker">SIDE-BY-SIDE EVALUATION</div><h3>Model comparison</h3><p>The selected models were run against the same uploaded CSV.</p></div><span class="comparison-count"><span class="material-symbols-rounded" aria-hidden="true">compare_arrows</span>{{ comparisons.length }} models</span></div>
+              <div class="table-scroll"><table class="results-table comparison-table"><thead><tr><th>Model</th><th>Records</th><th>Normal</th><th>Attack</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1 score</th><th>Status</th></tr></thead><tbody>@for (row of comparisons; track row.id) { <tr><td class="model-name-cell">{{ row.name }}</td>@if (row.error) { <td colspan="7"><span class="error-inline">{{ row.error }}</span></td><td><span class="comparison-failed">Failed</span></td> } @else { <td>{{ row.total_records }}</td><td>{{ row.normal_count }}</td><td>{{ row.attack_count }}</td><td>{{ formatPercent(row.metrics?.accuracy) }}</td><td>{{ formatPercent(row.metrics?.precision) }}</td><td>{{ formatPercent(row.metrics?.recall) }}</td><td>{{ formatPercent(row.metrics?.f1) }}</td><td><span class="comparison-ok">Complete</span></td> } }</tbody></table></div>
+              @if (!hasComparisonMetrics(comparisons)) { <div class="neutral-note"><span class="material-symbols-rounded" aria-hidden="true">info</span>This CSV has no ground-truth labels, so the comparison shows prediction counts only. Add <code>actual_label</code> to calculate evaluation metrics.</div> }
+              <p class="comparison-caveat">A higher score on a small sample does not prove that a model is safer or better on real network traffic. Compare models using a representative, labelled evaluation set.</p>
+            </section>
+          }
+        </section>
+      }
+    </section>
+
+    <section class="feature-info-grid">
+      <article class="info-card"><span class="material-symbols-rounded" aria-hidden="true">schema</span><div><h3>One input format</h3><p>The form and CSV upload both use raw NSL-KDD-style features. Encoding, scaling and feature engineering happen in the backend.</p></div></article>
+      <article class="info-card"><span class="material-symbols-rounded" aria-hidden="true">lock</span><div><h3>Prototype, not live monitoring</h3><p>This app predicts supplied records. It does not connect to a network, capture packets or block traffic.</p></div></article>
+      <article class="info-card"><span class="material-symbols-rounded" aria-hidden="true">dataset</span><div><h3>Know the dataset limits</h3><p>NSL-KDD is an older benchmark. High scores on this dataset should not be treated as proof of modern attack detection.</p></div></article>
+    </section>
+
+    <footer class="page-footer"><span class="footer-brand"><img class="brand-logo footer-logo" src="assets/nslkdd-mark.svg" alt=""> NSL-KDD Workbench</span><span>Research prototype <span class="footer-separator">·</span> {{ version }}</span></footer>
+  </main>
+</div>

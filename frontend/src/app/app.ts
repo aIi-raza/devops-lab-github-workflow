@@ -1,125 +1,127 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, HostListener, computed, signal } from '@angular/core';
 
-/* ---------------------------------------------------------------------
-   DEMO EDIT POINT (TypeScript)
-   Change this text, commit and push. It shows in the page header and in
-   the "How a change reaches this page" section.
---------------------------------------------------------------------- */
-const VERSION = 'v1.0';
+const VERSION = 'v1.1';
+const API_URL = (globalThis as typeof globalThis & { NSLKDD_API_URL?: string }).NSLKDD_API_URL ?? 'http://localhost:5000';
 
-// Address of the Flask backend. It only answers while backend/app.py is
-// running on this computer. The page works without it.
-const API_URL = 'http://localhost:5000';
-
-type MetricKey = 'accuracy' | 'precision' | 'recall' | 'f1';
-
-interface ModelResult {
-  name: string;
-  short: string;
-  source: 'ours' | 'paper';
-  accuracy: number;
-  precision: number;
-  recall: number;
-  f1: number;
-}
-
-interface SampleRow {
-  protocol: string;
-  service: string;
-  flag: string;
-  src: number;
-  dst: number;
-  label: string;
-  note: string;
-}
-
-interface GapBar {
-  label: string;
-  value: number;
-  text: string;
-  danger: boolean;
-}
-
-interface GapCard {
+type Theme = 'light' | 'dark';
+type Mode = 'single' | 'batch';
+type View = 'single' | 'batch' | 'comparison';
+type Prediction = {
+  row?: number;
+  predicted_class: number;
+  prediction: 'Normal' | 'Attack';
+  actual_label?: string;
+  probabilities?: { Normal: number; Attack: number };
+};
+type Metrics = { accuracy: number; precision: number; recall: number; f1: number };
+type CsvResult = {
   model: string;
-  bars: GapBar[];
-}
+  total_records: number;
+  normal_count: number;
+  attack_count: number;
+  records: Prediction[];
+  metrics?: Metrics;
+  evaluation_note?: string;
+};
+type ModelOption = { id: string; name: string; available: boolean; error?: string };
+type ComparisonRow = {
+  id: string;
+  name: string;
+  total_records?: number;
+  normal_count?: number;
+  attack_count?: number;
+  metrics?: Metrics;
+  error?: string;
+};
+type Feature = {
+  key: string;
+  label: string;
+  hint: string;
+  kind: 'number' | 'select';
+  options?: { label: string; value: string | number }[];
+  rate?: boolean;
+};
+type FeatureGroup = { title: string; description: string; fields: Feature[] };
 
-/* ---------- Real numbers from our runs (also served by the backend) ---------- */
+const protocolOptions = [
+  { label: 'TCP', value: 'tcp' }, { label: 'UDP', value: 'udp' }, { label: 'ICMP', value: 'icmp' },
+];
+const serviceNames = [
+  'aol','auth','bgp','courier','csnet_ns','ctf','daytime','discard','domain','domain_u','echo','eco_i','ecr_i','efs','exec','finger','ftp','ftp_data','gopher','harvest','hostnames','http','http_2784','http_443','http_8001','imap4','IRC','iso_tsap','klogin','kshell','ldap','link','login','mtp','name','netbios_dgm','netbios_ns','netbios_ssn','netstat','nnsp','nntp','ntp_u','other','pm_dump','pop_2','pop_3','printer','private','red_i','remote_job','rje','shell','smtp','sql_net','ssh','sunrpc','supdup','systat','telnet','tftp_u','tim_i','time','urh_i','urp_i','uucp','uucp_path','vmnet','whois','X11','Z39_50',
+].map((value) => ({ label: value, value }));
+const flagOptions = ['OTH','REJ','RSTO','RSTOS0','RSTR','S0','S1','S2','S3','SF','SH'].map((value) => ({ label: value, value }));
+const yesNoOptions = [{ label: 'No', value: 0 }, { label: 'Yes', value: 1 }];
 
-const BUILT_IN_RESULTS: ModelResult[] = [
-  { name: 'Decision Tree', short: 'DT', source: 'ours', accuracy: 99.19, precision: 99.12, recall: 99.19, f1: 99.15 },
-  { name: 'Random Forest', short: 'RF', source: 'ours', accuracy: 99.38, precision: 99.42, recall: 99.3, f1: 99.36 },
-  { name: 'XGBoost', short: 'XGB', source: 'ours', accuracy: 99.61, precision: 99.66, recall: 99.53, f1: 99.59 },
-  { name: 'XGBoost + feature engineering', short: 'XGB+FE', source: 'ours', accuracy: 99.62, precision: 99.66, recall: 99.55, f1: 99.61 },
-  { name: 'Decision Tree (paper)', short: 'DT', source: 'paper', accuracy: 99.51, precision: 99.49, recall: 99.46, f1: 99.47 },
-  { name: 'Random Forest (paper)', short: 'RF', source: 'paper', accuracy: 99.72, precision: 99.84, recall: 99.56, f1: 99.7 },
+const FEATURE_GROUPS: FeatureGroup[] = [
+  {
+    title: 'Connection details', description: 'Protocol, service, connection state and duration.', fields: [
+      { key: 'protocol_type', label: 'Protocol type', hint: 'Transport protocol used by the connection.', kind: 'select', options: protocolOptions },
+      { key: 'service', label: 'Service', hint: 'Destination network service recorded by NSL-KDD.', kind: 'select', options: serviceNames },
+      { key: 'flag', label: 'Connection flag', hint: 'Status of the connection as recorded in the dataset.', kind: 'select', options: flagOptions },
+      { key: 'duration', label: 'Duration (seconds)', hint: 'Length of the connection.', kind: 'number' },
+    ],
+  },
+  {
+    title: 'Traffic volume', description: 'Bytes and unusual fragments observed in the connection.', fields: [
+      { key: 'src_bytes', label: 'Source bytes', hint: 'Bytes sent from source to destination.', kind: 'number' },
+      { key: 'dst_bytes', label: 'Destination bytes', hint: 'Bytes sent from destination back to source.', kind: 'number' },
+      { key: 'wrong_fragment', label: 'Wrong fragments', hint: 'Count of malformed or unusual fragments.', kind: 'number' },
+      { key: 'hot', label: 'Hot indicators', hint: 'Dataset count of certain suspicious operations.', kind: 'number' },
+      { key: 'num_failed_logins', label: 'Failed logins', hint: 'Number of failed login attempts.', kind: 'number' },
+      { key: 'logged_in', label: 'Successfully logged in', hint: 'Whether the connection achieved a successful login.', kind: 'select', options: yesNoOptions },
+    ],
+  },
+  {
+    title: 'Connection patterns', description: 'Counts and error rates across recent connections.', fields: [
+      { key: 'count', label: 'Connection count', hint: 'Connections to the same host in the observation window.', kind: 'number' },
+      { key: 'srv_count', label: 'Service count', hint: 'Connections to the same service in the observation window.', kind: 'number' },
+      { key: 'serror_rate', label: 'SYN error rate', hint: 'Rate of connections with SYN errors (0–1).', kind: 'number', rate: true },
+      { key: 'same_srv_rate', label: 'Same service rate', hint: 'Rate of connections to the same service (0–1).', kind: 'number', rate: true },
+      { key: 'diff_srv_rate', label: 'Different service rate', hint: 'Rate of connections to different services (0–1).', kind: 'number', rate: true },
+    ],
+  },
+  {
+    title: 'Destination host patterns', description: 'Aggregated traffic statistics for the destination host.', fields: [
+      { key: 'dst_host_count', label: 'Destination host count', hint: 'Recent connections to the destination host.', kind: 'number' },
+      { key: 'dst_host_srv_count', label: 'Destination service count', hint: 'Recent connections to the same service at that host.', kind: 'number' },
+      { key: 'dst_host_same_srv_rate', label: 'Same service rate', hint: 'Destination host same-service rate (0–1).', kind: 'number', rate: true },
+      { key: 'dst_host_diff_srv_rate', label: 'Different service rate', hint: 'Destination host different-service rate (0–1).', kind: 'number', rate: true },
+      { key: 'dst_host_same_src_port_rate', label: 'Same source-port rate', hint: 'Destination host same-source-port rate (0–1).', kind: 'number', rate: true },
+      { key: 'dst_host_srv_diff_host_rate', label: 'Service different-host rate', hint: 'Rate of same-service connections to different hosts (0–1).', kind: 'number', rate: true },
+      { key: 'dst_host_serror_rate', label: 'Host SYN error rate', hint: 'Destination host SYN error rate (0–1).', kind: 'number', rate: true },
+      { key: 'dst_host_srv_serror_rate', label: 'Host service SYN error rate', hint: 'Destination host same-service SYN error rate (0–1).', kind: 'number', rate: true },
+      { key: 'dst_host_rerror_rate', label: 'Host REJ error rate', hint: 'Destination host REJ error rate (0–1).', kind: 'number', rate: true },
+      { key: 'dst_host_srv_rerror_rate', label: 'Host service REJ error rate', hint: 'Destination host same-service REJ error rate (0–1).', kind: 'number', rate: true },
+    ],
+  },
 ];
 
-// The first five rows of KDDTrain+ (the labels are the dataset's own labels)
-const SAMPLE_ROWS: SampleRow[] = [
-  {
-    protocol: 'tcp', service: 'ftp_data', flag: 'SF', src: 491, dst: 0, label: 'normal',
-    note: 'A file-transfer connection that opened and closed cleanly. 491 bytes went out and none came back.',
+const DEFAULT_FEATURES: Record<string, string | number> = {
+  duration: 0, protocol_type: 'tcp', service: 'http', flag: 'SF', src_bytes: 232, dst_bytes: 8153,
+  wrong_fragment: 0, hot: 0, num_failed_logins: 0, logged_in: 1, count: 1, srv_count: 1,
+  serror_rate: 0, same_srv_rate: 1, diff_srv_rate: 0, dst_host_count: 1, dst_host_srv_count: 1,
+  dst_host_same_srv_rate: 1, dst_host_diff_srv_rate: 0, dst_host_same_src_port_rate: 0,
+  dst_host_srv_diff_host_rate: 0, dst_host_serror_rate: 0, dst_host_srv_serror_rate: 0,
+  dst_host_rerror_rate: 0, dst_host_srv_rerror_rate: 0,
+};
+
+const SCENARIOS: Record<string, { title: string; description: string; features: Record<string, string | number> }> = {
+  normal: {
+    title: 'Normal web connection',
+    description: 'A clean HTTP connection with a small request and a larger response. Example features are illustrative.',
+    features: { ...DEFAULT_FEATURES, protocol_type: 'tcp', service: 'http', flag: 'SF', src_bytes: 232, dst_bytes: 8153, logged_in: 1, count: 4, srv_count: 4, dst_host_count: 155, dst_host_srv_count: 255, dst_host_same_srv_rate: 1, dst_host_same_src_port_rate: 0.01 },
   },
-  {
-    protocol: 'udp', service: 'other', flag: 'SF', src: 146, dst: 0, label: 'normal',
-    note: 'A short UDP message. UDP has no handshake, so there is nothing to complete.',
+  dos: {
+    title: 'DoS-like connection pattern',
+    description: 'A sample pattern with repeated rejected connections. It is a demonstration scenario, not a guarantee of an attack prediction.',
+    features: { ...DEFAULT_FEATURES, protocol_type: 'tcp', service: 'private', flag: 'REJ', src_bytes: 0, dst_bytes: 0, logged_in: 0, count: 229, srv_count: 10, same_srv_rate: 0.04, diff_srv_rate: 0.06, dst_host_count: 255, dst_host_srv_count: 10, dst_host_same_srv_rate: 0.04, dst_host_diff_srv_rate: 0.06, dst_host_rerror_rate: 1, dst_host_srv_rerror_rate: 1 },
   },
-  {
-    protocol: 'tcp', service: 'private', flag: 'S0', src: 0, dst: 0, label: 'neptune',
-    note: 'A SYN flood, called neptune in the dataset. The sender starts a connection and never finishes it (S0: no reply seen, no data moved). The attack repeats this until the server is overwhelmed.',
+  udp: {
+    title: 'Short UDP message',
+    description: 'A small UDP record from the dataset style. It is included to explore how the model responds to different inputs.',
+    features: { ...DEFAULT_FEATURES, protocol_type: 'udp', service: 'other', flag: 'SF', src_bytes: 146, dst_bytes: 0, logged_in: 0, count: 1, srv_count: 1, dst_host_count: 1, dst_host_srv_count: 1 },
   },
-  {
-    protocol: 'tcp', service: 'http', flag: 'SF', src: 232, dst: 8153, label: 'normal',
-    note: 'A web page request. The browser sends a little (232 bytes), the server sends back a lot (8,153 bytes), and the connection ends cleanly.',
-  },
-  {
-    protocol: 'tcp', service: 'http', flag: 'SF', src: 199, dst: 420, label: 'normal',
-    note: 'Another ordinary web request: small question, slightly larger answer, clean finish.',
-  },
-];
-
-/* ---------- Random split vs. cross-validation vs. official test file ---------- */
-
-const GAP_ROWS = [
-  { model: 'Decision Tree', paper: 99.51, single: 99.19, cvMean: 99.4, cvStd: 0.05, official: 79.49 },
-  { model: 'Random Forest', paper: 99.72, single: 99.38, cvMean: 99.59, cvStd: 0.03, official: 77.87 },
-];
-
-const GAP_CARDS: GapCard[] = GAP_ROWS.map((g) => ({
-  model: g.model,
-  bars: [
-    { label: 'Paper, one random split', value: g.paper, text: `${g.paper.toFixed(2)}%`, danger: false },
-    { label: 'Ours, one random split', value: g.single, text: `${g.single.toFixed(2)}%`, danger: false },
-    { label: 'Ours, 5-fold cross-validation', value: g.cvMean, text: `${g.cvMean.toFixed(2)} ± ${g.cvStd.toFixed(2)}`, danger: false },
-    { label: 'Ours, official test file', value: g.official, text: `${g.official.toFixed(2)}%`, danger: true },
-  ],
-}));
-
-const DROPS = GAP_ROWS.map((g) => g.cvMean - g.official);
-const DROP_TEXT = `${Math.round(Math.min(...DROPS))} to ${Math.round(Math.max(...DROPS))}`;
-
-/* ---------- Class balance of the 148,517 rows ---------- */
-
-const NORMAL_COUNT = 77054;
-const ATTACK_COUNT = 71463;
-const TOTAL = NORMAL_COUNT + ATTACK_COUNT;
-
-/* ---------- Checks that data coming from the API has the right shape ---------- */
-
-function isModelResult(x: unknown): x is ModelResult {
-  if (typeof x !== 'object' || x === null) {
-    return false;
-  }
-  const r = x as Record<string, unknown>;
-  return (
-    typeof r['name'] === 'string' &&
-    typeof r['short'] === 'string' &&
-    (r['source'] === 'ours' || r['source'] === 'paper') &&
-    ['accuracy', 'precision', 'recall', 'f1'].every((k) => typeof r[k] === 'number')
-  );
-}
+};
 
 @Component({
   selector: 'app-root',
@@ -128,209 +130,279 @@ function isModelResult(x: unknown): x is ModelResult {
 })
 export class App {
   readonly version = VERSION;
-
-  readonly sections = [
-    { id: 'about', label: 'Data' },
-    { id: 'method', label: 'Method' },
-    { id: 'results', label: 'Results' },
-    { id: 'gap', label: 'Gap' },
-    { id: 'ship', label: 'Shipping' },
-  ];
-
-  // Hero table
-  readonly samples = SAMPLE_ROWS;
-  readonly selectedRow = signal(2);
-  readonly currentSample = computed(() => this.samples[this.selectedRow()]);
-
-  // Data section
-  readonly normalCount = NORMAL_COUNT;
-  readonly attackCount = ATTACK_COUNT;
-  readonly total = TOTAL;
-  readonly normalPct = (NORMAL_COUNT / TOTAL) * 100;
-  readonly attackPct = (ATTACK_COUNT / TOTAL) * 100;
-
-  // Method section
-  readonly steps = [
-    { title: 'Combine the two files', text: 'KDDTrain+ and KDDTest+ are merged into one table of 148,517 connections, the same way the paper did.' },
-    { title: 'Label each connection', text: 'The dataset names the exact attack (neptune, smurf and others). We reduce that to two labels: normal or attack.' },
-    { title: 'Keep 25 of the 41 measurements', text: 'The paper ranked the measurements by importance and kept the 25 that mattered. We kept the same 25.' },
-    { title: 'Turn words into numbers', text: 'Protocol, service and flag hold words such as tcp or http. They become numbers, and every column is then scaled to the range 0 to 1.' },
-    { title: 'Train the models', text: 'Decision Tree and Random Forest, the paper’s best two, plus XGBoost, which the paper did not use. 80% of the rows train the model and 20% are held back for testing.' },
-    { title: 'Measure', text: 'Accuracy, precision, recall and F1 on the held-back 20%, compared with the paper’s numbers.' },
-  ];
-
-  // Results section
-  readonly results = signal<ModelResult[]>(BUILT_IN_RESULTS);
-  readonly selectedModel = signal(3);
-  readonly metrics: { key: MetricKey; label: string }[] = [
-    { key: 'accuracy', label: 'Accuracy' },
-    { key: 'precision', label: 'Precision' },
-    { key: 'recall', label: 'Recall' },
-    { key: 'f1', label: 'F1 score' },
-  ];
-
-  readonly ours = computed(() => this.results().filter((r) => r.source === 'ours'));
-
-  readonly model = computed(() => {
-    const list = this.ours();
-    return list[Math.min(this.selectedModel(), list.length - 1)];
-  });
-
-  // The paper's row we compare against: the same model if the paper used it,
-  // otherwise the paper's best model (Random Forest)
-  readonly reference = computed(() => {
-    const paper = this.results().filter((r) => r.source === 'paper');
-    const current = this.model();
-    return paper.find((p) => p.short === current.short) ?? paper.find((p) => p.short === 'RF') ?? paper[0];
-  });
-
-  readonly referenceNote = computed(() =>
-    this.reference().short === this.model().short
-      ? 'Compared with the same model in the paper.'
-      : `The paper did not use this model, so it is compared with the paper’s best model, ${this.reference().name.replace(' (paper)', '')}.`,
-  );
-
-  // Highest value in each column, used to underline the best score in the table
-  readonly best = computed(() => {
-    const rows = this.results();
-    return {
-      accuracy: Math.max(...rows.map((r) => r.accuracy)),
-      precision: Math.max(...rows.map((r) => r.precision)),
-      recall: Math.max(...rows.map((r) => r.recall)),
-      f1: Math.max(...rows.map((r) => r.f1)),
-    };
-  });
-
-  // Gap section
-  readonly gapCards = GAP_CARDS;
-  readonly dropText = DROP_TEXT;
-
-  // Shipping section
-  readonly flow = [
-    { title: 'Push', text: 'You commit and push to the main branch.' },
-    { title: 'CI', text: 'Backend: syntax check and unit tests. Frontend: install and production build.' },
-    { title: 'CD', text: 'Runs only if CI passed. Builds with the Pages address and publishes.' },
-    { title: 'Live', text: 'GitHub Pages serves the new version of this page.' },
-  ];
-
-  // Backend status
+  readonly theme = signal<Theme>('light');
+  readonly mode = signal<Mode>('single');
+  readonly activeView = signal<View>('single');
+  readonly scrolled = signal(false);
+  readonly featureGroups = FEATURE_GROUPS;
+  readonly scenarios = SCENARIOS;
+  readonly scenarioKeys = Object.keys(SCENARIOS);
+  readonly selectedScenario = signal('normal');
+  readonly features = signal<Record<string, string | number>>({ ...DEFAULT_FEATURES });
+  readonly inferenceModels = signal<ModelOption[]>([]);
+  readonly selectedModel = signal('random_forest');
   readonly apiState = signal<'checking' | 'online' | 'offline'>('checking');
-  readonly dataSource = signal<'built-in' | 'api'>('built-in');
-
-  readonly apiLabel = computed(() => {
-    switch (this.apiState()) {
-      case 'online':
-        return 'Backend online';
-      case 'offline':
-        return 'Backend offline';
-      default:
-        return 'Checking backend';
-    }
-  });
-
-  readonly apiNote = computed(() => {
-    if (this.apiState() === 'checking') {
-      return 'Looking for the Flask backend.';
-    }
-    if (this.apiState() === 'offline') {
-      return 'The backend is not running. This page works without it and uses results built into the page.';
-    }
-    return this.dataSource() === 'api'
-      ? 'The Flask backend answered, and the results on this page were loaded from it.'
-      : 'The Flask backend answered, but its results were not usable, so built-in results are shown.';
-  });
+  readonly singleBusy = signal(false);
+  readonly singleError = signal('');
+  readonly singleResult = signal<Prediction | null>(null);
+  readonly selectedCsv = signal<File | null>(null);
+  readonly csvBusy = signal(false);
+  readonly csvError = signal('');
+  readonly csvResult = signal<CsvResult | null>(null);
+  readonly comparisonBusy = signal(false);
+  readonly comparisonError = signal('');
+  readonly comparisonResults = signal<ComparisonRow[] | null>(null);
+  readonly selectedComparisonModels = signal<string[]>(['random_forest', 'xgboost']);
+  readonly visibleRecords = computed(() => (this.csvResult()?.records ?? []).slice(0, 100));
+  readonly totalFeatures = FEATURE_GROUPS.reduce((sum, group) => sum + group.fields.length, 0);
+  readonly apiLabel = computed(() => this.apiState() === 'online' ? 'Inference API connected' : this.apiState() === 'checking' ? 'Checking API' : 'API unavailable');
 
   constructor() {
-    this.loadFonts();
-    void this.loadFromApi();
-  }
-
-  /* ---------- Helpers used by the template ---------- */
-
-  fmt(value: number): string {
-    return value.toFixed(2);
-  }
-
-  fmtInt(value: number): string {
-    return value.toLocaleString('en-US');
-  }
-
-  pct(value: number): string {
-    return `${value.toFixed(1)}%`;
-  }
-
-  isAttack(row: SampleRow): boolean {
-    return row.label !== 'normal';
-  }
-
-  // Bars are zoomed to the 98-100% range, otherwise every bar looks the same
-  bar(value: number): number {
-    return Math.max(0, Math.min(100, ((value - 98) / 2) * 100));
-  }
-
-  compare(ours: number, paper: number): string {
-    const diff = ours - paper;
-    if (Math.abs(diff) < 0.005) {
-      return `Paper ${this.fmt(paper)}%, the same as ours`;
-    }
-    return `Paper ${this.fmt(paper)}%, ours is ${Math.abs(diff).toFixed(2)} points ${diff > 0 ? 'above' : 'below'}`;
-  }
-
-  // Fonts are added from here, not from CSS, so the build never needs the internet.
-  // If they cannot load, the page quietly uses the system fonts.
-  private loadFonts(): void {
-    const urls = [
-      'https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;800&display=swap',
-      'https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap',
-    ];
-    for (const href of urls) {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = href;
-      document.head.appendChild(link);
-    }
-  }
-
-  private motion(): ScrollBehavior {
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
-  }
-
-  go(id: string): void {
-    document.getElementById(id)?.scrollIntoView({ behavior: this.motion(), block: 'start' });
-  }
-
-  top(): void {
-    window.scrollTo({ top: 0, behavior: this.motion() });
-  }
-
-  /* ---------- Ask the Flask backend for the results table ---------- */
-
-  private async loadFromApi(): Promise<void> {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 2500);
     try {
-      const res = await fetch(`${API_URL}/api/results`, { signal: controller.signal });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
+      const saved = localStorage.getItem('nslkdd-theme');
+      if (saved === 'light' || saved === 'dark') this.theme.set(saved);
+    } catch { /* Continue with the default theme. */ }
+    void this.loadInferenceModels();
+  }
+
+  navigate(view: View): void {
+    this.activeView.set(view);
+    this.mode.set(view === 'single' ? 'single' : 'batch');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  @HostListener('window:scroll')
+  onWindowScroll(): void {
+    this.scrolled.set(window.scrollY > 18);
+  }
+
+  toggleTheme(): void {
+    const next: Theme = this.theme() === 'dark' ? 'light' : 'dark';
+    this.theme.set(next);
+    try { localStorage.setItem('nslkdd-theme', next); } catch { /* Theme still works for this session. */ }
+  }
+
+  modelName(id: string): string {
+    return this.inferenceModels().find((model) => model.id === id)?.name ?? id;
+  }
+
+  async loadInferenceModels(): Promise<void> {
+    this.apiState.set('checking');
+    try {
+      const response = await fetch(`${API_URL}/api/models`);
+      if (!response.ok) throw new Error(`API returned ${response.status}`);
+      const body = await response.json();
+      const models = (body.models ?? []) as ModelOption[];
+      this.inferenceModels.set(models.filter((model) => model.available));
+      if (!this.inferenceModels().some((model) => model.id === this.selectedModel())) {
+        this.selectedModel.set(this.inferenceModels()[0]?.id ?? 'random_forest');
       }
       this.apiState.set('online');
-
-      const body: unknown = await res.json();
-      const models = (body as { models?: unknown } | null)?.models;
-      if (Array.isArray(models) && models.length > 0 && models.every((m) => isModelResult(m))) {
-        const rows = models as ModelResult[];
-        if (rows.some((r) => r.source === 'ours') && rows.some((r) => r.source === 'paper')) {
-          this.results.set(rows);
-          this.selectedModel.set(0);
-          this.dataSource.set('api');
-        }
-      }
     } catch {
-      if (this.apiState() !== 'online') {
-        this.apiState.set('offline');
-      }
-    } finally {
-      clearTimeout(timer);
+      this.inferenceModels.set([]);
+      this.apiState.set('offline');
     }
+  }
+
+  setFeature(key: string, event: Event): void {
+    const target = event.target as HTMLInputElement | HTMLSelectElement;
+    const field = this.featureGroups.flatMap((group) => group.fields).find((item) => item.key === key);
+    const value: string | number = field?.kind === 'number' ? Number(target.value || 0) : target.value;
+    this.features.update((current) => ({ ...current, [key]: value }));
+    this.singleResult.set(null);
+    this.singleError.set('');
+  }
+
+  featureValue(key: string): string | number {
+    return this.features()[key] ?? 0;
+  }
+
+  useScenario(key: string): void {
+    const scenario = this.scenarios[key];
+    if (!scenario) return;
+    this.selectedScenario.set(key);
+    this.features.set({ ...scenario.features });
+    this.singleResult.set(null);
+    this.singleError.set('');
+  }
+
+  async runSinglePrediction(): Promise<void> {
+    if (!this.inferenceModels().length) {
+      this.singleError.set('The inference API is unavailable. Start the Flask backend and check that model artifacts are loaded.');
+      return;
+    }
+    this.singleBusy.set(true);
+    this.singleError.set('');
+    this.singleResult.set(null);
+    try {
+      const response = await fetch(`${API_URL}/api/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: this.selectedModel(), input_format: 'raw', features: this.features() }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? `Prediction failed (${response.status})`);
+      this.singleResult.set(body.result as Prediction);
+    } catch (error) {
+      this.singleError.set(error instanceof Error ? error.message : 'Prediction request failed.');
+    } finally {
+      this.singleBusy.set(false);
+    }
+  }
+
+  chooseCsv(event: Event): void {
+    this.acceptCsv((event.target as HTMLInputElement).files?.[0] ?? null);
+  }
+
+  dropCsv(event: DragEvent): void {
+    event.preventDefault();
+    this.acceptCsv(event.dataTransfer?.files?.[0] ?? null);
+  }
+
+  private acceptCsv(file: File | null): void {
+    this.csvError.set('');
+    this.csvResult.set(null);
+    this.comparisonResults.set(null);
+    this.comparisonError.set('');
+    if (!file) { this.selectedCsv.set(null); return; }
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      this.selectedCsv.set(null);
+      this.csvError.set('Please choose a .csv file.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      this.selectedCsv.set(null);
+      this.csvError.set('This file exceeds the 5 MB upload limit.');
+      return;
+    }
+    this.selectedCsv.set(file);
+  }
+
+  async loadSampleCsv(filename: string): Promise<void> {
+    this.csvError.set('');
+    this.csvResult.set(null);
+    this.comparisonResults.set(null);
+    try {
+      const url = new URL(`samples/${filename}`, document.baseURI);
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('The sample file could not be loaded.');
+      const blob = await response.blob();
+      this.acceptCsv(new File([blob], filename, { type: 'text/csv' }));
+      this.mode.set('batch');
+    } catch (error) {
+      this.csvError.set(error instanceof Error ? error.message : 'Could not load sample data.');
+    }
+  }
+
+  async runCsvPrediction(): Promise<void> {
+    const file = this.selectedCsv();
+    if (!file) { this.csvError.set('Choose a CSV file or load a sample first.'); return; }
+    this.csvBusy.set(true);
+    this.csvError.set('');
+    this.csvResult.set(null);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('model', this.selectedModel());
+      form.append('input_format', 'raw');
+      const response = await fetch(`${API_URL}/api/predict/csv`, { method: 'POST', body: form });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? `CSV analysis failed (${response.status})`);
+      this.csvResult.set(body as CsvResult);
+    } catch (error) {
+      this.csvError.set(error instanceof Error ? error.message : 'CSV analysis failed.');
+    } finally {
+      this.csvBusy.set(false);
+    }
+  }
+
+  toggleComparisonModel(id: string, checked: boolean): void {
+    const current = this.selectedComparisonModels();
+    if (checked && !current.includes(id)) {
+      if (current.length >= 3) return;
+      this.selectedComparisonModels.set([...current, id]);
+    } else if (!checked) {
+      this.selectedComparisonModels.set(current.filter((item) => item !== id));
+    }
+    this.comparisonResults.set(null);
+    this.comparisonError.set('');
+  }
+
+  async compareModels(): Promise<void> {
+    const file = this.selectedCsv();
+    if (!file) { this.comparisonError.set('Choose a CSV file or load a sample first.'); return; }
+    const selected = this.selectedComparisonModels();
+    const models = this.inferenceModels().filter((model) => selected.includes(model.id));
+    if (models.length < 2) { this.comparisonError.set('Select at least two models to compare.'); return; }
+    if (models.length > 3) { this.comparisonError.set('Select no more than three models.'); return; }
+    this.comparisonBusy.set(true);
+    this.comparisonError.set('');
+    this.comparisonResults.set(null);
+    try {
+      const rows = await Promise.all(models.map(async (model): Promise<ComparisonRow> => {
+        try {
+          const form = new FormData();
+          form.append('file', file, file.name);
+          form.append('model', model.id);
+          form.append('input_format', 'raw');
+          const response = await fetch(`${API_URL}/api/predict/csv`, { method: 'POST', body: form });
+          const body = await response.json();
+          if (!response.ok) throw new Error(body.error ?? `Request failed (${response.status})`);
+          return {
+            id: model.id,
+            name: model.name,
+            total_records: body.total_records,
+            normal_count: body.normal_count,
+            attack_count: body.attack_count,
+            metrics: body.metrics,
+          };
+        } catch (error) {
+          return { id: model.id, name: model.name, error: error instanceof Error ? error.message : 'Model comparison failed.' };
+        }
+      }));
+      this.comparisonResults.set(rows);
+      if (rows.every((row) => row.error)) this.comparisonError.set('All model requests failed. Check the CSV columns and backend logs.');
+    } catch (error) {
+      this.comparisonError.set(error instanceof Error ? error.message : 'Could not compare models.');
+    } finally {
+      this.comparisonBusy.set(false);
+    }
+  }
+
+  downloadCsvResults(): void {
+    const result = this.csvResult();
+    if (!result?.records?.length) return;
+    const columns = Object.keys(result.records[0]);
+    const escape = (value: unknown) => {
+      const raw = value === null || value === undefined ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value);
+      return /[",\r\n]/.test(raw) ? `"${raw.replace(/"/g, '""')}"` : raw;
+    };
+    const csv = [columns.join(','), ...result.records.map((row) => columns.map((column) => escape((row as unknown as Record<string, unknown>)[column])).join(','))].join('\r\n');
+    this.downloadBlob(csv, 'nsl-kdd-predictions.csv', 'text/csv;charset=utf-8');
+  }
+
+  private downloadBlob(content: BlobPart, filename: string, type: string): void {
+    const url = URL.createObjectURL(new Blob([content], { type }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  formatPercent(value: number | undefined): string {
+    return typeof value === 'number' ? `${(value * 100).toFixed(2)}%` : '—';
+  }
+
+  maxProbability(probabilities: { Normal: number; Attack: number }): number {
+    return Math.max(probabilities.Normal, probabilities.Attack);
+  }
+
+  displayedLabel(value: string | undefined): string {
+    return value ?? 'Not provided';
+  }
+
+  hasComparisonMetrics(rows: ComparisonRow[]): boolean {
+    return rows.some((row) => !!row.metrics);
   }
 }

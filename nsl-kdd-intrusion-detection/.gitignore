@@ -13,3 +13,5 @@ env/
 
 # OS junk
 .DS_Store
+# Generated model artifacts (regenerate locally with train_artifacts.py)
+artifacts/

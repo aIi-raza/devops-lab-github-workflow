@@ -16,6 +16,7 @@ KDDTest+.txt on your machine.
 """
 
 import os
+import argparse
 
 from src.data_loader import load_and_combine_data, assign_column_names
 from src.preprocessing import (
@@ -97,4 +98,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="NSL-KDD research pipeline")
+    parser.add_argument("--train-artifacts", action="store_true", help="Train models and save reusable artifacts for Flask inference")
+    args = parser.parse_args()
+    if args.train_artifacts:
+        from src.artifact_pipeline import train_and_save
+        train_and_save()
+    else:
+        main()

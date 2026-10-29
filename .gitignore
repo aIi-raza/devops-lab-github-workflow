@@ -20,3 +20,5 @@ Thumbs.db
 
 # IDE settings (optional)
 .vscode/
+# Generated NSL-KDD model artifacts
+nsl-kdd-intrusion-detection/artifacts/

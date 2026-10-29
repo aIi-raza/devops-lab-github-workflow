@@ -1,189 +1,305 @@
 <div class="app-shell" [attr.data-theme]="theme()">
-  <header class="topbar" [class.scrolled]="scrolled()">
-    <a class="brand" href="#top" aria-label="NSL-KDD Workbench home">
-      <img class="brand-logo" src="assets/nslkdd-mark.svg" alt="">
-      <span class="brand-text"><strong>NSL-KDD <span>Workbench</span></strong><small>INTRUSION DETECTION · ML LAB</small></span>
-    </a>
 
-    <nav class="top-nav" aria-label="Main navigation">
-      <button type="button" [class.active]="activeView() === 'single'" (click)="navigate('single')"><span class="material-symbols-rounded" aria-hidden="true">tune</span> Single prediction</button>
-      <button type="button" [class.active]="activeView() === 'batch'" (click)="navigate('batch')"><span class="material-symbols-rounded" aria-hidden="true">table_view</span> CSV analysis</button>
-      <button type="button" [class.active]="activeView() === 'comparison'" (click)="navigate('comparison')"><span class="material-symbols-rounded" aria-hidden="true">compare_arrows</span> Model comparison</button>
-    </nav>
+  <app-cursor />
 
-    <div class="top-actions">
-      <div class="api-status" [class.online]="apiState() === 'online'" [class.offline]="apiState() === 'offline'" [title]="apiLabel()">
-        <span class="status-dot"></span><span>{{ apiLabel() }}</span>
+  <!-- Navigation: full-width at the top, collapses into a floating pill on scroll -->
+  <header class="nav" [class.scrolled]="scrolled()">
+    <div class="nav-inner">
+      <a class="brand" href="#top" aria-label="NSL-KDD Workbench home">
+        <svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="7" fill="currentColor"/><g stroke="var(--bg)" stroke-width="1.5" stroke-linecap="round" fill="none"><path d="M7 16.5 12 8l5 8.5M7 16.5h10"/></g><g fill="var(--bg)"><circle cx="12" cy="8" r="1.9"/><circle cx="7" cy="16.5" r="1.9"/><circle cx="17" cy="16.5" r="1.9"/></g></svg>
+        <span class="brand-text">NSL-KDD <em>Workbench</em></span>
+      </a>
+      <nav #navLinks class="nav-links" aria-label="Main navigation" (pointerleave)="moveNavPill()">
+        <span class="nav-pill" [class.show]="navPill().show" [style.width.px]="navPill().w" [style.transform]="'translateX(' + navPill().x + 'px)'"></span>
+        <button type="button" [class.active]="activeView() === 'single'" (pointerenter)="moveNavPill($any($event.currentTarget))" (click)="navigate('single')">Predict</button>
+        <button type="button" [class.active]="activeView() === 'batch'" (pointerenter)="moveNavPill($any($event.currentTarget))" (click)="navigate('batch')">CSV analysis</button>
+        <button type="button" [class.active]="activeView() === 'comparison'" (pointerenter)="moveNavPill($any($event.currentTarget))" (click)="navigate('comparison')">Compare</button>
+      </nav>
+      <div class="nav-actions">
+        <span class="status" [class.online]="apiState() === 'online'" [class.offline]="apiState() === 'offline'" [title]="apiLabel()"><i></i><span>{{ apiLabel() }}</span></span>
+        <button class="icon-btn" type="button" (click)="toggleTheme()" [attr.aria-label]="theme() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"><span class="icon" aria-hidden="true">{{ theme() === 'dark' ? 'light_mode' : 'dark_mode' }}</span></button>
       </div>
-      <button class="theme-toggle" type="button" (click)="toggleTheme()" [attr.aria-label]="theme() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'">
-        <span class="material-symbols-rounded" aria-hidden="true">{{ theme() === 'dark' ? 'light_mode' : 'dark_mode' }}</span>
-        
-      </button>
     </div>
   </header>
 
-  <main id="top" class="page-wrap">
-    <section class="hero-row">
+  <main id="top">
+    <!-- Hero -->
+    <section class="hero" (pointermove)="onHeroMove($event)" (pointerleave)="onHeroLeave($event)">
+      <app-globe class="hero-globe"></app-globe>
+      @if (inferenceModels().length) {
+        <div class="float-cards" aria-label="Available models">
+          @for (m of inferenceModels().slice(0, 5); track m.id; let i = $index) {
+            <button type="button" class="float-card" [class.on]="selectedModel() === m.id" [style.--i]="i" (click)="selectedModel.set(m.id)">
+              <span class="fc-badge">{{ selectedModel() === m.id ? 'Active' : 'Ready' }}</span>
+              <strong>{{ m.name }}</strong>
+              <small>Inference model</small>
+            </button>
+          }
+        </div>
+      }
       <div class="hero-copy">
-        <div class="eyebrow"><span class="eyebrow-line"></span> MACHINE LEARNING · NSL-KDD DATASET</div>
-        <h1>Explore traffic.<br /><span>Test detection models.</span></h1>
-        <p>Run trained classifiers against NSL-KDD-compatible connection records. Use a guided form for one record or analyze a CSV batch.</p>
-        <div class="hero-pills"><span><span class="material-symbols-rounded" aria-hidden="true">model_training</span> 4 trained models</span><span><span class="material-symbols-rounded" aria-hidden="true">dataset</span> 25 selected features</span><span><span class="material-symbols-rounded" aria-hidden="true">science</span> Research prototype</span></div>
-      </div>
-      <aside class="hero-note">
-        <span class="note-icon material-symbols-rounded" aria-hidden="true">info</span>
-        <div><strong>What this tool does</strong><p>It classifies supplied records using saved NSL-KDD-trained models. It does not capture live traffic or replace production security monitoring.</p></div>
-      </aside>
-    </section>
-
-    @if (apiState() === 'offline' || inferenceModels().length === 0) {
-      <section class="service-alert" role="status">
-        <span class="material-symbols-rounded" aria-hidden="true">cloud_off</span>
-        <div><strong>Prediction API unavailable</strong><p>Start the Flask backend and confirm that trained model artifacts are available. The interface will not invent predictions when the API is offline.</p><code>python app.py</code></div>
-        <button type="button" class="button button-secondary" (click)="loadInferenceModels()"><span class="material-symbols-rounded" aria-hidden="true">refresh</span> Retry connection</button>
-      </section>
-    }
-
-    <section class="workspace-card" id="workspace">
-      <div class="workspace-heading">
-        <div><div class="section-kicker">PREDICTION WORKSPACE</div><h2>Prediction workspace</h2><p>Run a single-record prediction or analyze a CSV batch.</p></div>
-        <div class="model-picker" [class.disabled]="inferenceModels().length === 0">
-          <span class="material-symbols-rounded model-picker-icon" aria-hidden="true">neurology</span>
-          <span class="model-picker-copy"><small>ACTIVE MODEL</small><strong>{{ modelName(selectedModel()) }}</strong></span>
-          <span class="material-symbols-rounded picker-chevron" aria-hidden="true">expand_more</span>
-          <select aria-label="Choose active model" [value]="selectedModel()" (change)="selectedModel.set($any($event.target).value)" [disabled]="inferenceModels().length === 0">
-            @for (model of inferenceModels(); track model.id) { <option [value]="model.id">{{ model.name }}</option> }
-          </select>
+        <span class="pill rise" style="--d:.05s"><i></i> NSL-KDD · Intrusion detection</span>
+        <h1 class="rise" style="--d:.15s">Explore network traffic.<br /><span>Test detection models.</span></h1>
+        <p class="rise" style="--d:.3s">Classify connection records with trained machine-learning models. Check a single record or analyze a whole CSV.</p>
+        <div class="hero-cta rise" style="--d:.45s">
+          <button type="button" class="btn btn-primary btn-lg" (click)="navigate('single')">Start predicting <span class="icon" aria-hidden="true">arrow_forward</span></button>
+          <button type="button" class="btn btn-outline btn-lg" (click)="navigate('batch')">Upload a CSV</button>
         </div>
       </div>
+      <ul class="hero-facts rise" style="--d:.65s">
+        <li><strong>{{ totalFeatures }}</strong> features</li>
+        <li><strong>{{ inferenceModels().length || '—' }}</strong> models</li>
+        <li><strong>CSV</strong> batch analysis</li>
+      </ul>
+    </section>
 
-      @if (activeView() === 'single') {
-      <section class="workflow-section single-workflow" id="predict">
-        <div class="workflow-section-heading"><div><div class="section-kicker">SINGLE RECORD</div><h2>Test one connection</h2><p>Use a preset or enter all required NSL-KDD features.</p></div></div>
-          <div class="scenario-bar">
-            <div><strong>Start with an example</strong><p>Load a preset, inspect its values, then run the selected model.</p></div>
-            <div class="scenario-buttons">
-              <button type="button" [class.selected]="selectedScenario() === 'normal'" (click)="useScenario('normal')"><span class="material-symbols-rounded" aria-hidden="true">check_circle</span> Normal example</button>
-              <button type="button" [class.selected]="selectedScenario() === 'dos'" (click)="useScenario('dos')"><span class="material-symbols-rounded" aria-hidden="true">warning</span> DoS-like example</button>
-              <button type="button" [class.selected]="selectedScenario() === 'udp'" (click)="useScenario('udp')"><span class="material-symbols-rounded" aria-hidden="true">swap_horiz</span> UDP example</button>
-            </div>
+    <!-- Workspace -->
+    <section class="section" id="workspace">
+      <div class="container">
+        @if (apiState() === 'offline' || inferenceModels().length === 0) {
+          <div class="alert alert-danger" role="status" appReveal>
+            <span class="icon" aria-hidden="true">cloud_off</span>
+            <div><strong>Prediction API unavailable</strong><p>Start the Flask backend and confirm trained model artifacts are loaded. The interface never invents predictions. Run <code>python app.py</code>.</p></div>
+            <button type="button" class="btn btn-outline btn-sm" (click)="loadInferenceModels()">Retry</button>
           </div>
-          <div class="scenario-description"><span class="material-symbols-rounded" aria-hidden="true">info</span>{{ scenarios[selectedScenario()].description }}</div>
+        }
 
-          <form class="feature-form" (submit)="$event.preventDefault(); runSinglePrediction()">
-            @for (group of featureGroups; track group.title) {
-              <section class="feature-group">
-                <div class="feature-group-heading"><span class="group-mark"></span><div><h3>{{ group.title }}</h3><p>{{ group.description }}</p></div></div>
-                <div class="field-grid">
-                  @for (field of group.fields; track field.key) {
-                    <label class="feature-field" [class.wide-field]="field.kind === 'select' && field.key === 'service'">
-                      <span class="feature-label">{{ field.label }}</span>
-                      @if (field.kind === 'select') {
-                        <span class="input-wrap"><select [value]="featureValue(field.key)" (change)="setFeature(field.key, $event)">@for (option of field.options ?? []; track option.value) { <option [value]="option.value">{{ option.label }}</option> }</select><span class="material-symbols-rounded" aria-hidden="true">expand_more</span></span>
-                      } @else {
-                        <input [value]="featureValue(field.key)" (input)="setFeature(field.key, $event)" type="number" min="0" [max]="field.rate ? 1 : null" [step]="field.rate ? '0.01' : '1'" [attr.aria-label]="field.label" />
+        <div class="ws-head" appReveal>
+          <div>
+            <span class="eyebrow">Workspace</span>
+            <h2>Run a model</h2>
+            <p>Test one connection, analyze a CSV file, or compare models on the same data.</p>
+          </div>
+          <label class="model-select">
+            <span>Active model</span>
+            <span class="select">
+              <select aria-label="Choose active model" [value]="selectedModel()" (change)="selectedModel.set($any($event.target).value)" [disabled]="inferenceModels().length === 0">
+                @for (model of inferenceModels(); track model.id) { <option [value]="model.id" [selected]="model.id === selectedModel()">{{ model.name }}</option> }
+              </select>
+              <span class="icon" aria-hidden="true">expand_more</span>
+            </span>
+          </label>
+        </div>
+
+        <div class="tabs" role="tablist" aria-label="Workflow" appReveal>
+          <span class="tab-thumb" [style.transform]="'translateX(' + (activeView() === 'single' ? 0 : activeView() === 'batch' ? 100 : 200) + '%)'"></span>
+          <button type="button" role="tab" [attr.aria-selected]="activeView() === 'single'" [class.active]="activeView() === 'single'" (click)="setView('single')">Single prediction</button>
+          <button type="button" role="tab" [attr.aria-selected]="activeView() === 'batch'" [class.active]="activeView() === 'batch'" (click)="setView('batch')">CSV analysis</button>
+          <button type="button" role="tab" [attr.aria-selected]="activeView() === 'comparison'" [class.active]="activeView() === 'comparison'" (click)="setView('comparison')">Model comparison</button>
+        </div>
+
+        <!-- Single prediction -->
+        @if (activeView() === 'single') {
+          <div class="view split" id="predict">
+            <form class="stack" (submit)="$event.preventDefault(); runSinglePrediction()" id="feature-form">
+              @for (group of featureGroups; track group.title) {
+                <section class="card" appReveal>
+                  <header class="card-head"><h3>{{ group.title }}</h3><p>{{ group.description }}</p></header>
+                  <div class="card-body field-grid">
+                    @for (field of group.fields; track field.key) {
+                      <label class="field" [class.span-2]="field.key === 'service'">
+                        <span class="field-label">{{ field.label }}</span>
+                        @if (field.kind === 'select') {
+                          <span class="select"><select [value]="featureValue(field.key)" (change)="setFeature(field.key, $event)">@for (option of field.options ?? []; track option.value) { <option [value]="option.value" [selected]="option.value == featureValue(field.key)">{{ option.label }}</option> }</select><span class="icon" aria-hidden="true">expand_more</span></span>
+                        } @else {
+                          <input class="input" [value]="featureValue(field.key)" (input)="setFeature(field.key, $event)" type="number" min="0" [max]="field.rate ? 1 : null" [step]="field.rate ? '0.01' : '1'" [attr.aria-label]="field.label" />
+                        }
+                        <small>{{ field.hint }}</small>
+                      </label>
+                    }
+                  </div>
+                </section>
+              }
+            </form>
+
+            <aside class="side">
+              <section class="card sticky" appReveal>
+                <header class="card-head"><h3>Prediction</h3><p>{{ modelName(selectedModel()) }} · {{ totalFeatures }} features</p></header>
+                <div class="card-body">
+                  <span class="field-label">Start from a preset</span>
+                  <div class="segmented">
+                    <button type="button" [class.active]="selectedScenario() === 'normal'" (click)="useScenario('normal')">Normal</button>
+                    <button type="button" [class.active]="selectedScenario() === 'dos'" (click)="useScenario('dos')">DoS-like</button>
+                    <button type="button" [class.active]="selectedScenario() === 'udp'" (click)="useScenario('udp')">UDP</button>
+                  </div>
+                  <p class="muted small">{{ scenarios[selectedScenario()].description }}</p>
+                  <button class="btn btn-primary btn-block" type="submit" form="feature-form" [disabled]="singleBusy() || inferenceModels().length === 0">
+                    @if (singleBusy()) { <span class="icon spin" aria-hidden="true">progress_activity</span> Predicting… } @else { Run prediction }
+                  </button>
+
+                  @if (singleError()) { <div class="alert alert-danger" role="alert"><span class="icon" aria-hidden="true">error</span><p>{{ singleError() }}</p></div> }
+
+                  @if (singleResult(); as result) {
+                    <div class="result" aria-live="polite">
+                      <div class="result-top">
+                        <span class="badge" [class.badge-attack]="result.predicted_class === 1" [class.badge-normal]="result.predicted_class === 0"><i></i>{{ result.prediction }}</span>
+                        <span class="muted small">Class {{ result.predicted_class }}</span>
+                      </div>
+                      <p class="result-title">{{ result.prediction }} traffic</p>
+                      @if (result.probabilities) {
+                        <div class="prob">
+                          <div class="prob-row"><span>Normal</span><b>{{ (result.probabilities.Normal * 100).toFixed(2) }}%</b></div>
+                          <div class="bar"><i class="ok" [style.width.%]="result.probabilities.Normal * 100"></i></div>
+                          <div class="prob-row"><span>Attack</span><b>{{ (result.probabilities.Attack * 100).toFixed(2) }}%</b></div>
+                          <div class="bar"><i class="bad" [style.width.%]="result.probabilities.Attack * 100"></i></div>
+                        </div>
                       }
-                      <small>{{ field.hint }}</small>
-                    </label>
+                      <p class="muted small">The selected model's classification of these values — not a verified security verdict.</p>
+                    </div>
+                  } @else if (!singleError()) {
+                    <div class="empty">No prediction yet. Pick a preset or edit the values, then run the model.</div>
                   }
                 </div>
               </section>
-            }
-            <div class="form-actions">
-              <p><span class="material-symbols-rounded" aria-hidden="true">fact_check</span> {{ totalFeatures }} required features · categorical values are encoded by the backend</p>
-              <button class="button button-primary" type="submit" [disabled]="singleBusy() || inferenceModels().length === 0"><span class="material-symbols-rounded" aria-hidden="true">{{ singleBusy() ? 'progress_activity' : 'play_arrow' }}</span>{{ singleBusy() ? 'Predicting…' : 'Predict connection' }}<span class="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>
-            </div>
-          </form>
-
-          @if (singleError()) { <div class="inline-alert error-alert" role="alert"><span class="material-symbols-rounded" aria-hidden="true">error</span><p>{{ singleError() }}</p></div> }
-          @if (singleResult(); as result) {
-            <section class="single-result-card" aria-live="polite">
-              <div class="result-status-icon" [class.attack-result]="result.predicted_class === 1"><span class="material-symbols-rounded" aria-hidden="true">{{ result.predicted_class === 1 ? 'gpp_maybe' : 'verified_user' }}</span></div>
-              <div class="single-result-main"><div class="section-kicker">MODEL PREDICTION</div><h3 [class.attack-text]="result.predicted_class === 1">{{ result.prediction }} traffic</h3><p>Class {{ result.predicted_class }} · {{ modelName(selectedModel()) }} · NSL-KDD feature schema</p></div>
-              @if (result.probabilities) { <div class="probability-pair"><div><span>Normal probability</span><strong>{{ (result.probabilities.Normal * 100).toFixed(2) }}%</strong></div><div><span>Attack probability</span><strong>{{ (result.probabilities.Attack * 100).toFixed(2) }}%</strong></div></div> }
-              <p class="result-disclaimer">This is the selected model's classification for the supplied feature values—not a verified security verdict.</p>
-            </section>
-          }
-      </section>
-      }
-      @if (activeView() === 'batch') {
-      <section class="workflow-section batch-workflow" id="batch">
-        <div class="workflow-section-heading"><div><div class="section-kicker">BATCH ANALYSIS</div><h2>Analyze a CSV dataset</h2><p>Upload your own compatible records or load one of the included samples.</p></div></div>
-          <div class="batch-layout">
-            <div class="upload-column">
-              <div class="batch-intro"><span class="material-symbols-rounded" aria-hidden="true">upload_file</span><div><h3>Upload a raw-feature CSV</h3><p>Use NSL-KDD feature names and original categorical values. Do not upload a preprocessed numeric file.</p></div></div>
-              <label class="dropzone" for="csv-upload" [class.has-file]="!!selectedCsv()" (dragover)="$event.preventDefault()" (drop)="dropCsv($event)">
-                <input id="csv-upload" type="file" accept=".csv,text/csv" (change)="chooseCsv($event)" />
-                <span class="material-symbols-rounded upload-icon" aria-hidden="true">cloud_upload</span>
-                @if (selectedCsv(); as file) { <strong>{{ file.name }}</strong><span>{{ (file.size / 1024).toFixed(1) }} KB · ready to analyze</span><span class="browse-text">Choose another file</span> }
-                @else { <strong>Drop your CSV here</strong><span>or <span class="browse-text">browse files</span> on your device</span><small>CSV only · up to 5 MB · maximum 5,000 rows</small> }
-              </label>
-              <div class="format-callout"><span class="material-symbols-rounded" aria-hidden="true">description</span><div><strong>Required file structure</strong><p>25 selected feature columns. An optional <code>actual_label</code> column can contain <code>Normal</code>/<code>Attack</code> or <code>0</code>/<code>1</code>.</p></div></div>
-              @if (csvError()) { <div class="inline-alert error-alert" role="alert"><span class="material-symbols-rounded" aria-hidden="true">error</span><p>{{ csvError() }}</p></div> }
-              <div class="batch-actions">
-                <button class="button button-primary" type="button" [disabled]="csvBusy() || !selectedCsv() || inferenceModels().length === 0" (click)="runCsvPrediction()"><span class="material-symbols-rounded" aria-hidden="true">{{ csvBusy() ? 'progress_activity' : 'play_arrow' }}</span>{{ csvBusy() ? 'Analyzing CSV…' : 'Analyze with selected model' }}<span class="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>
-              </div>
-            </div>
-
-            <aside class="sample-column" id="samples">
-              <div class="sample-heading"><div><div class="section-kicker">QUICK START</div><h3>Load a sample</h3><p>Prefill the uploader with included NSL-KDD-style records.</p></div><a class="button button-secondary compact-button" href="samples/sample_mixed.csv" download><span class="material-symbols-rounded" aria-hidden="true">download</span> Download example CSV</a></div>
-              <div class="sample-card-list">
-                <article class="sample-card"><span class="sample-icon normal-icon material-symbols-rounded" aria-hidden="true">check_circle</span><div><strong>Normal traffic</strong><small>sample_normal.csv</small><div class="sample-card-actions"><button type="button" (click)="loadSampleCsv('sample_normal.csv')">Load sample</button></div></div></article>
-                <article class="sample-card"><span class="sample-icon attack-icon material-symbols-rounded" aria-hidden="true">warning</span><div><strong>Attack traffic</strong><small>sample_attack.csv</small><div class="sample-card-actions"><button type="button" (click)="loadSampleCsv('sample_attack.csv')">Load sample</button></div></div></article>
-                <article class="sample-card"><span class="sample-icon mixed-icon material-symbols-rounded" aria-hidden="true">dataset</span><div><strong>Mixed records</strong><small>sample_mixed.csv</small><div class="sample-card-actions"><button type="button" (click)="loadSampleCsv('sample_mixed.csv')">Load sample</button></div></div></article>
-              </div>
-              <div class="sample-footnote"><span class="material-symbols-rounded" aria-hidden="true">info</span><p>Samples are for demonstrating the workflow, not for estimating real-world detection performance. Uploaded files are sent to the configured Flask API.</p></div>
             </aside>
           </div>
+        }
 
-          @if (csvResult(); as result) {
-            <section class="output-section" aria-live="polite">
-              <div class="output-heading"><div><div class="section-kicker">BATCH RESULTS</div><h3>Prediction summary</h3><p>{{ result.total_records }} records · {{ modelName(result.model) }}</p></div><button class="button button-secondary compact-button" type="button" (click)="downloadCsvResults()"><span class="material-symbols-rounded" aria-hidden="true">download</span> Export predictions</button></div>
-              <div class="summary-grid"><div class="summary-card"><span>Total records</span><strong>{{ result.total_records }}</strong><small>Rows processed</small></div><div class="summary-card normal-summary"><span>Normal predictions</span><strong>{{ result.normal_count }}</strong><small>{{ result.total_records ? (result.normal_count / result.total_records * 100).toFixed(1) : '0.0' }}% of records</small></div><div class="summary-card attack-summary"><span>Attack predictions</span><strong>{{ result.attack_count }}</strong><small>{{ result.total_records ? (result.attack_count / result.total_records * 100).toFixed(1) : '0.0' }}% of records</small></div></div>
-              @if (result.metrics) { <div class="evaluation-panel"><div><span class="material-symbols-rounded" aria-hidden="true">query_stats</span><div><strong>Evaluation against supplied labels</strong><p>These metrics describe only this uploaded file, not generalization to unseen traffic.</p></div></div><div class="metric-strip"><span>Accuracy <strong>{{ formatPercent(result.metrics.accuracy) }}</strong></span><span>Precision <strong>{{ formatPercent(result.metrics.precision) }}</strong></span><span>Recall <strong>{{ formatPercent(result.metrics.recall) }}</strong></span><span>F1 score <strong>{{ formatPercent(result.metrics.f1) }}</strong></span></div></div> }
-              @else { <div class="neutral-note"><span class="material-symbols-rounded" aria-hidden="true">info</span> No ground-truth labels were found. Predictions are shown, but evaluation metrics cannot be calculated.</div> }
-              <div class="table-heading"><div><h4>Record-level predictions</h4><p>Showing up to 100 records in the page; export contains all processed rows.</p></div></div>
-              <div class="table-scroll"><table class="results-table"><thead><tr><th>Row</th><th>Prediction</th><th>Actual label</th><th>Model probability</th></tr></thead><tbody>@for (record of visibleRecords(); track record.row) { <tr><td>{{ record.row }}</td><td><span class="prediction-badge" [class.badge-attack]="record.predicted_class === 1" [class.badge-normal]="record.predicted_class === 0"><span class="status-dot"></span>{{ record.prediction }}</span></td><td>{{ displayedLabel(record.actual_label) }}</td><td>@if (record.probabilities) { <div class="probability-cell"><span>{{ (maxProbability(record.probabilities) * 100).toFixed(1) }}%</span><div><i [style.width.%]="maxProbability(record.probabilities) * 100"></i></div></div> } @else { <span class="muted-value">—</span> }</td></tr> }</tbody></table></div>
-            </section>
-          }
+        <!-- CSV analysis -->
+        @if (activeView() === 'batch') {
+          <div class="view stack-lg" id="batch">
+            <div class="split split-even">
+              <section class="card" appReveal>
+                <header class="card-head"><h3>Upload a CSV</h3><p>Raw NSL-KDD feature names and original categorical values. Not a preprocessed numeric file.</p></header>
+                <div class="card-body">
+                  <label class="dropzone" for="csv-upload" [class.has-file]="!!selectedCsv()" (dragover)="$event.preventDefault()" (drop)="dropCsv($event)">
+                    <input id="csv-upload" type="file" accept=".csv,text/csv" (change)="chooseCsv($event)" />
+                    <span class="icon" aria-hidden="true">upload_file</span>
+                    @if (selectedCsv(); as file) {
+                      <strong>{{ file.name }}</strong><span>{{ (file.size / 1024).toFixed(1) }} KB · ready to analyze</span><span class="link">Choose another file</span>
+                    } @else {
+                      <strong>Drop your CSV here</strong><span>or <span class="link">browse files</span></span><small>CSV only · up to 5 MB · max 5,000 rows</small>
+                    }
+                  </label>
+                  <p class="muted small">Needs the {{ totalFeatures }} selected feature columns. Add an optional <code>actual_label</code> column (<code>Normal</code>/<code>Attack</code> or <code>0</code>/<code>1</code>) to get evaluation metrics.</p>
+                  @if (csvError()) { <div class="alert alert-danger" role="alert"><span class="icon" aria-hidden="true">error</span><p>{{ csvError() }}</p></div> }
+                  <button class="btn btn-primary btn-block" type="button" [disabled]="csvBusy() || !selectedCsv() || inferenceModels().length === 0" (click)="runCsvPrediction()">
+                    @if (csvBusy()) { <span class="icon spin" aria-hidden="true">progress_activity</span> Analyzing… } @else { Analyze with {{ modelName(selectedModel()) }} }
+                  </button>
+                </div>
+              </section>
 
+              <section class="card" id="samples" appReveal>
+                <header class="card-head row"><div><h3>Sample data</h3><p>Load a bundled file to try the workflow.</p></div><a class="btn btn-outline btn-sm" href="samples/sample_mixed.csv" download>Download</a></header>
+                <div class="card-body list">
+                  <div class="list-row"><div><strong>Normal traffic</strong><small>sample_normal.csv</small></div><button type="button" class="btn btn-ghost btn-sm" (click)="loadSampleCsv('sample_normal.csv')">Load</button></div>
+                  <div class="list-row"><div><strong>Attack traffic</strong><small>sample_attack.csv</small></div><button type="button" class="btn btn-ghost btn-sm" (click)="loadSampleCsv('sample_attack.csv')">Load</button></div>
+                  <div class="list-row"><div><strong>Mixed records</strong><small>sample_mixed.csv</small></div><button type="button" class="btn btn-ghost btn-sm" (click)="loadSampleCsv('sample_mixed.csv')">Load</button></div>
+                  <p class="muted small">Samples demonstrate the workflow, not real-world detection performance. Uploaded files are sent to the configured Flask API.</p>
+                </div>
+              </section>
+            </div>
 
-      </section>
-      }
+            @if (csvResult(); as result) {
+              <div class="stack-lg" aria-live="polite">
+                <div class="stats">
+                  <article class="stat"><span>Total records</span><strong [appCountUp]="result.total_records">0</strong><small>Rows processed</small></article>
+                  <article class="stat"><span>Normal</span><strong class="t-ok" [appCountUp]="result.normal_count">0</strong><small>{{ pct(result.normal_count, result.total_records) }}% of records</small></article>
+                  <article class="stat"><span>Attack</span><strong class="t-bad" [appCountUp]="result.attack_count">0</strong><small>{{ pct(result.attack_count, result.total_records) }}% of records</small></article>
+                  <article class="stat"><span>Model</span><strong class="stat-text">{{ modelName(result.model) }}</strong><small>Used for this run</small></article>
+                </div>
 
-      @if (activeView() === 'comparison') {
-        <section class="workflow-section comparison-workflow" id="comparison">
-          <div class="workflow-section-heading"><div><div class="section-kicker">MODEL EVALUATION</div><h2>Compare trained models</h2><p>Run 2–3 available models against the same selected CSV and compare their outputs.</p></div></div>
-          <div class="comparison-picker" aria-label="Choose models to compare">
-            <div><strong>Models to compare</strong><small>Select at least two and no more than three trained models.</small></div>
-            <div class="comparison-options">@for (model of inferenceModels(); track model.id) { <label><input type="checkbox" [checked]="selectedComparisonModels().includes(model.id)" [disabled]="!selectedComparisonModels().includes(model.id) && selectedComparisonModels().length >= 3" (change)="toggleComparisonModel(model.id, $any($event.target).checked)"><span>{{ model.name }}</span></label> }</div>
+                @if (result.metrics) {
+                  <section class="card">
+                    <header class="card-head"><h3>Evaluation</h3><p>Computed against the labels in your file only — not a measure of generalization.</p></header>
+                    <div class="card-body metrics">
+                      <div><span>Accuracy</span><b>{{ formatPercent(result.metrics.accuracy) }}</b><div class="bar"><i [style.width.%]="result.metrics.accuracy * 100"></i></div></div>
+                      <div><span>Precision</span><b>{{ formatPercent(result.metrics.precision) }}</b><div class="bar"><i [style.width.%]="result.metrics.precision * 100"></i></div></div>
+                      <div><span>Recall</span><b>{{ formatPercent(result.metrics.recall) }}</b><div class="bar"><i [style.width.%]="result.metrics.recall * 100"></i></div></div>
+                      <div><span>F1 score</span><b>{{ formatPercent(result.metrics.f1) }}</b><div class="bar"><i [style.width.%]="result.metrics.f1 * 100"></i></div></div>
+                    </div>
+                  </section>
+                } @else {
+                  <div class="alert"><span class="icon" aria-hidden="true">info</span><p>No ground-truth labels found, so evaluation metrics can't be calculated. Predictions are still shown.</p></div>
+                }
+
+                <section class="card">
+                  <header class="card-head row"><div><h3>Record-level predictions</h3><p>Showing up to 100 records. Export contains every processed row.</p></div><button class="btn btn-outline btn-sm" type="button" (click)="downloadCsvResults()"><span class="icon" aria-hidden="true">download</span> Export</button></header>
+                  <div class="table-wrap"><table class="table"><thead><tr><th>Row</th><th>Prediction</th><th>Actual label</th><th>Confidence</th></tr></thead><tbody>
+                    @for (record of visibleRecords(); track record.row) {
+                      <tr><td class="mono">{{ record.row }}</td>
+                        <td><span class="badge" [class.badge-attack]="record.predicted_class === 1" [class.badge-normal]="record.predicted_class === 0"><i></i>{{ record.prediction }}</span></td>
+                        <td>{{ displayedLabel(record.actual_label) }}</td>
+                        <td>@if (record.probabilities) { <div class="conf"><span class="mono">{{ (maxProbability(record.probabilities) * 100).toFixed(1) }}%</span><div class="bar sm"><i [style.width.%]="maxProbability(record.probabilities) * 100"></i></div></div> } @else { <span class="muted">—</span> }</td></tr>
+                    }
+                  </tbody></table></div>
+                </section>
+              </div>
+            }
           </div>
-          <div class="comparison-source">
-            <div class="comparison-file-info"><strong>Comparison dataset</strong><p>{{ selectedCsv()?.name ?? 'No CSV selected yet' }}</p><small>Select a CSV here or in CSV Analysis. Your selection is retained when switching views.</small></div>
-            <label class="button button-secondary comparison-file-button" for="comparison-csv-upload"><span class="material-symbols-rounded" aria-hidden="true">upload_file</span> Choose CSV
-              <input id="comparison-csv-upload" class="visually-hidden-file" type="file" accept=".csv,text/csv" (change)="chooseCsv($event)" />
-            </label>
-            <button class="button button-primary" type="button" [disabled]="comparisonBusy() || !selectedCsv() || inferenceModels().length === 0" (click)="compareModels()"><span class="material-symbols-rounded" aria-hidden="true">{{ comparisonBusy() ? 'progress_activity' : 'compare_arrows' }}</span>{{ comparisonBusy() ? 'Comparing models…' : 'Run comparison' }}</button>
+        }
+
+        <!-- Comparison -->
+        @if (activeView() === 'comparison') {
+          <div class="view stack-lg" id="comparison">
+            <div class="split split-even">
+              <section class="card" appReveal>
+                <header class="card-head"><h3>Models</h3><p>Select two or three trained models.</p></header>
+                <div class="card-body choice-list" aria-label="Choose models to compare">
+                  @for (model of inferenceModels(); track model.id) {
+                    <label class="choice" [class.on]="selectedComparisonModels().includes(model.id)">
+                      <input type="checkbox" [checked]="selectedComparisonModels().includes(model.id)" [disabled]="!selectedComparisonModels().includes(model.id) && selectedComparisonModels().length >= 3" (change)="toggleComparisonModel(model.id, $any($event.target).checked)">
+                      <span>{{ model.name }}</span>
+                    </label>
+                  } @empty { <p class="muted small">No models available.</p> }
+                </div>
+              </section>
+              <section class="card" appReveal>
+                <header class="card-head"><h3>Dataset</h3><p>Shared with CSV analysis, so the selection carries over.</p></header>
+                <div class="card-body">
+                  <div class="file-line"><span class="icon" aria-hidden="true">description</span><span>{{ selectedCsv()?.name ?? 'No CSV selected yet' }}</span></div>
+                  <div class="btn-row">
+                    <label class="btn btn-outline" for="comparison-csv-upload">Choose CSV<input id="comparison-csv-upload" class="sr-file" type="file" accept=".csv,text/csv" (change)="chooseCsv($event)" /></label>
+                    <button class="btn btn-primary" type="button" [disabled]="comparisonBusy() || !selectedCsv() || inferenceModels().length === 0" (click)="compareModels()">
+                      @if (comparisonBusy()) { <span class="icon spin" aria-hidden="true">progress_activity</span> Comparing… } @else { Run comparison }
+                    </button>
+                  </div>
+                  @if (comparisonError()) { <div class="alert alert-danger" role="alert"><span class="icon" aria-hidden="true">error</span><p>{{ comparisonError() }}</p></div> }
+                </div>
+              </section>
+            </div>
+
+            @if (comparisonResults(); as comparisons) {
+              <section class="card" aria-live="polite">
+                <header class="card-head row"><div><h3>Side-by-side results</h3><p>All selected models ran on the same CSV.</p></div><span class="badge badge-muted">{{ comparisons.length }} models</span></header>
+                <div class="table-wrap"><table class="table"><thead><tr><th>Model</th><th>Records</th><th>Normal</th><th>Attack</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1 score</th><th>Status</th></tr></thead><tbody>
+                  @for (row of comparisons; track row.id) {
+                    <tr><td><strong>{{ row.name }}</strong></td>
+                      @if (row.error) { <td colspan="7"><span class="t-bad">{{ row.error }}</span></td><td><span class="badge badge-attack"><i></i>Failed</span></td> }
+                      @else { <td class="mono">{{ row.total_records }}</td><td class="mono">{{ row.normal_count }}</td><td class="mono">{{ row.attack_count }}</td><td class="mono">{{ formatPercent(row.metrics?.accuracy) }}</td><td class="mono">{{ formatPercent(row.metrics?.precision) }}</td><td class="mono">{{ formatPercent(row.metrics?.recall) }}</td>
+                        <td>@if (row.metrics) { <div class="conf"><span class="mono">{{ formatPercent(row.metrics.f1) }}</span><div class="bar sm"><i [style.width.%]="row.metrics.f1 * 100"></i></div></div> } @else { <span class="muted">—</span> }</td>
+                        <td><span class="badge badge-normal"><i></i>Complete</span></td> }
+                    </tr>
+                  }
+                </tbody></table></div>
+                <div class="card-foot">
+                  @if (!hasComparisonMetrics(comparisons)) { <p>This CSV has no ground-truth labels, so only prediction counts are shown. Add <code>actual_label</code> to calculate metrics.</p> }
+                  <p>A higher score on a small sample does not prove a model is better on real traffic. Compare on a representative, labelled set.</p>
+                </div>
+              </section>
+            }
           </div>
-          @if (comparisonError()) { <div class="inline-alert error-alert" role="alert"><span class="material-symbols-rounded" aria-hidden="true">error</span><p>{{ comparisonError() }}</p></div> }
-                    @if (comparisonResults(); as comparisons) {
-            <section class="comparison-section" aria-live="polite">
-              <div class="output-heading"><div><div class="section-kicker">SIDE-BY-SIDE EVALUATION</div><h3>Model comparison</h3><p>The selected models were run against the same uploaded CSV.</p></div><span class="comparison-count"><span class="material-symbols-rounded" aria-hidden="true">compare_arrows</span>{{ comparisons.length }} models</span></div>
-              <div class="table-scroll"><table class="results-table comparison-table"><thead><tr><th>Model</th><th>Records</th><th>Normal</th><th>Attack</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1 score</th><th>Status</th></tr></thead><tbody>@for (row of comparisons; track row.id) { <tr><td class="model-name-cell">{{ row.name }}</td>@if (row.error) { <td colspan="7"><span class="error-inline">{{ row.error }}</span></td><td><span class="comparison-failed">Failed</span></td> } @else { <td>{{ row.total_records }}</td><td>{{ row.normal_count }}</td><td>{{ row.attack_count }}</td><td>{{ formatPercent(row.metrics?.accuracy) }}</td><td>{{ formatPercent(row.metrics?.precision) }}</td><td>{{ formatPercent(row.metrics?.recall) }}</td><td>{{ formatPercent(row.metrics?.f1) }}</td><td><span class="comparison-ok">Complete</span></td> } }</tbody></table></div>
-              @if (!hasComparisonMetrics(comparisons)) { <div class="neutral-note"><span class="material-symbols-rounded" aria-hidden="true">info</span>This CSV has no ground-truth labels, so the comparison shows prediction counts only. Add <code>actual_label</code> to calculate evaluation metrics.</div> }
-              <p class="comparison-caveat">A higher score on a small sample does not prove that a model is safer or better on real network traffic. Compare models using a representative, labelled evaluation set.</p>
-            </section>
-          }
-        </section>
-      }
+        }
+      </div>
     </section>
 
-    <section class="feature-info-grid">
-      <article class="info-card"><span class="material-symbols-rounded" aria-hidden="true">schema</span><div><h3>One input format</h3><p>The form and CSV upload both use raw NSL-KDD-style features. Encoding, scaling and feature engineering happen in the backend.</p></div></article>
-      <article class="info-card"><span class="material-symbols-rounded" aria-hidden="true">lock</span><div><h3>Prototype, not live monitoring</h3><p>This app predicts supplied records. It does not connect to a network, capture packets or block traffic.</p></div></article>
-      <article class="info-card"><span class="material-symbols-rounded" aria-hidden="true">dataset</span><div><h3>Know the dataset limits</h3><p>NSL-KDD is an older benchmark. High scores on this dataset should not be treated as proof of modern attack detection.</p></div></article>
+    <!-- Notes -->
+    <section class="section notes">
+      <div class="container">
+        <div class="notes-head" appReveal><span class="eyebrow">Good to know</span><h2>A research prototype,<br />not a monitoring system.</h2></div>
+        <div class="notes-grid">
+          <article appReveal style="--d:.05s"><span class="num">01</span><h3>One input format</h3><p>The form and the CSV upload both use raw NSL-KDD features. Encoding, scaling and feature engineering happen in the backend.</p></article>
+          <article appReveal style="--d:.15s"><span class="num">02</span><h3>Supplied records only</h3><p>It classifies the records you provide. It does not capture packets, connect to a network or block traffic.</p></article>
+          <article appReveal style="--d:.25s"><span class="num">03</span><h3>Know the dataset</h3><p>NSL-KDD is an older benchmark. High scores on it are not proof of detecting modern attacks.</p></article>
+        </div>
+      </div>
     </section>
-
-    <footer class="page-footer"><span class="footer-brand"><img class="brand-logo footer-logo" src="assets/nslkdd-mark.svg" alt=""> NSL-KDD Workbench</span><span>Research prototype <span class="footer-separator">·</span> {{ version }}</span></footer>
   </main>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <span class="brand"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="7" fill="currentColor"/><g stroke="var(--bg)" stroke-width="1.5" stroke-linecap="round" fill="none"><path d="M7 16.5 12 8l5 8.5M7 16.5h10"/></g><g fill="var(--bg)"><circle cx="12" cy="8" r="1.9"/><circle cx="7" cy="16.5" r="1.9"/><circle cx="17" cy="16.5" r="1.9"/></g></svg><span>NSL-KDD <em>Workbench</em></span></span>
+      <span class="muted small">Research prototype · {{ version }}</span>
+    </div>
+  </footer>
 </div>

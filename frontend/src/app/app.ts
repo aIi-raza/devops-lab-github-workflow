@@ -1,4 +1,8 @@
-import { Component, HostListener, computed, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, HostListener, ViewChild, computed, signal } from '@angular/core';
+import { CountUp } from './count-up';
+import { Cursor } from './cursor';
+import { Globe } from './globe';
+import { Reveal } from './reveal';
 
 const VERSION = 'v1.1';
 const API_URL = (globalThis as typeof globalThis & { NSLKDD_API_URL?: string }).NSLKDD_API_URL ?? 'http://localhost:5000';
@@ -125,10 +129,13 @@ const SCENARIOS: Record<string, { title: string; description: string; features: 
 
 @Component({
   selector: 'app-root',
+  imports: [Globe, Reveal, CountUp, Cursor],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
-export class App {
+export class App implements AfterViewInit {
+  @ViewChild('navLinks', { static: true }) private navLinks!: ElementRef<HTMLElement>;
+  readonly navPill = signal<{ x: number; w: number; show: boolean }>({ x: 0, w: 0, show: false });
   readonly version = VERSION;
   readonly theme = signal<Theme>('light');
   readonly mode = signal<Mode>('single');
@@ -165,10 +172,68 @@ export class App {
     void this.loadInferenceModels();
   }
 
+  ngAfterViewInit(): void {
+    this.moveNavPill();
+    document.fonts?.ready.then(() => this.moveNavPill());
+  }
+
   navigate(view: View): void {
     this.activeView.set(view);
     this.mode.set(view === 'single' ? 'single' : 'batch');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    this.moveNavPill();
+    document.getElementById('workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  setView(view: View): void {
+    this.activeView.set(view);
+    this.mode.set(view === 'single' ? 'single' : 'batch');
+    this.moveNavPill();
+  }
+
+  /** Slides the nav highlight under a link (hovered link, or the active one when nothing is hovered). */
+  moveNavPill(hovered?: HTMLElement): void {
+    queueMicrotask(() => {
+      const box = this.navLinks?.nativeElement;
+      const el = hovered ?? box?.querySelector<HTMLElement>('button.active') ?? null;
+      if (!box || !el) { this.navPill.set({ x: 0, w: 0, show: false }); return; }
+      this.navPill.set({ x: el.offsetLeft, w: el.offsetWidth, show: true });
+    });
+  }
+
+  @HostListener('window:resize')
+  onResize(): void { this.moveNavPill(); }
+
+  private readonly spot = { x: 0, y: 0, tx: 0, ty: 0, raf: 0, el: null as HTMLElement | null };
+
+  onHeroMove(event: PointerEvent): void {
+    const el = event.currentTarget as HTMLElement;
+    const rect = el.getBoundingClientRect();
+    const s = this.spot;
+    s.tx = event.clientX - rect.left;
+    s.ty = event.clientY - rect.top;
+    if (!s.el) { s.x = s.tx; s.y = s.ty; }
+    s.el = el;
+    el.style.setProperty('--spot', '1');
+    if (!s.raf) s.raf = requestAnimationFrame(() => this.spotTick());
+  }
+
+  onHeroLeave(event: PointerEvent): void {
+    (event.currentTarget as HTMLElement).style.setProperty('--spot', '0');
+  }
+
+  private spotTick(): void {
+    const s = this.spot;
+    s.raf = 0;
+    if (!s.el) return;
+    s.x += (s.tx - s.x) * 0.12;
+    s.y += (s.ty - s.y) * 0.12;
+    s.el.style.setProperty('--mx', `${s.x.toFixed(1)}px`);
+    s.el.style.setProperty('--my', `${s.y.toFixed(1)}px`);
+    if (Math.abs(s.tx - s.x) > 0.3 || Math.abs(s.ty - s.y) > 0.3) s.raf = requestAnimationFrame(() => this.spotTick());
+  }
+
+  pct(part: number, total: number): string {
+    return total ? ((part / total) * 100).toFixed(1) : '0.0';
   }
 
   @HostListener('window:scroll')

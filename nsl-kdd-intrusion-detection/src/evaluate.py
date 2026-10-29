@@ -84,7 +84,7 @@ def print_explanation():
 CONCLUSION:
 
 Our Decision Tree and Random Forest results closely matched the paper's
-reported numbers (within ~0.2%), confirming our implementation is valid
+reported numbers (within ~0.3%), confirming our implementation is valid
 and consistent with published research on this dataset.
 
 Our third model, XGBoost, outperformed our own DT and RF across nearly
@@ -92,15 +92,13 @@ every metric - demonstrating the value of a more advanced ensemble method.
 Adding engineered features gave a further small improvement.
 
 However, even our best model (XGBoost + Feature Engineering) did not
-surpass the paper's reported Random Forest results. The most likely
-reason is a preprocessing difference: the paper applied Cook's Distance
-to detect and remove statistical outliers before training their models,
-a step we did not replicate in this lab. Outlier removal can meaningfully
-improve model performance on this dataset, and its absence here likely
-explains the remaining gap.
+surpass the paper's reported Random Forest results. One possible reason is
+a preprocessing difference: the paper mentions applying Cook's Distance to
+handle outliers, a step we did not replicate. We did not test whether this
+actually explains the gap, so it remains a hypothesis.
 
-This does not indicate a flawed implementation - it highlights that data
-preprocessing quality can matter as much as model choice when working
-with high-performing baselines like this one.
+This does not indicate a flawed implementation - on a dataset where
+baseline models already score above 99%, small differences in
+preprocessing or splitting can decide who ends up slightly ahead.
 """
     print(explanation)

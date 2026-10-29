@@ -5,9 +5,10 @@ Loads the NSL-KDD train and test files, combines them into one dataset,
 and assigns proper column names (the raw files have no headers).
 """
 
-import pandas as pd
+import pandas as pd  # library for working with tables of data
 
 # Official NSL-KDD column names (41 features + class label + difficulty level)
+# The raw files don't have these written in them, so we define them ourselves
 COLUMN_NAMES = [
     "duration", "protocol_type", "service", "flag", "src_bytes",
     "dst_bytes", "land", "wrong_fragment", "urgent", "hot",
@@ -38,6 +39,7 @@ def load_and_combine_data(train_path: str, test_path: str) -> pd.DataFrame:
     print("=" * 60)
 
     # header=None because the raw files don't include column names
+    # (without this, pandas would wrongly treat the first data row as headers)
     train_df = pd.read_csv(train_path, header=None)
     test_df = pd.read_csv(test_path, header=None)
 
@@ -45,6 +47,8 @@ def load_and_combine_data(train_path: str, test_path: str) -> pd.DataFrame:
     print(f"  Test shape:     {test_df.shape}")
 
     # Stack train and test on top of each other into one dataset
+    # axis=0 means "stack as new rows" (axis=1 would mean "stack as new columns")
+    # ignore_index=True makes row numbers continue 0,1,2... instead of restarting
     full_df = pd.concat([train_df, test_df], axis=0, ignore_index=True)
     print(f"  Combined shape: {full_df.shape}")
 
@@ -53,6 +57,8 @@ def load_and_combine_data(train_path: str, test_path: str) -> pd.DataFrame:
 
 def assign_column_names(df: pd.DataFrame) -> pd.DataFrame:
     """Attach the official NSL-KDD column names to the dataframe."""
+    # Right now columns are just numbered 0, 1, 2... this renames them
+    # to real names like "duration", "protocol_type", etc.
     df.columns = COLUMN_NAMES
     print(f"  Columns assigned: {len(COLUMN_NAMES)}")
     return df

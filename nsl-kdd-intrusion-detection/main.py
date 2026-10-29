@@ -26,6 +26,10 @@ from src.feature_engineering import add_engineered_features
 from src.train_models import train_decision_tree, train_random_forest, train_xgboost
 from src.evaluate import evaluate_model, build_comparison_table, print_explanation
 from src.visualize import plot_confusion_matrices, plot_comparison_chart
+from src.gap_experiments import (
+    run_cross_validation, run_official_split_test,
+    print_gap_summary, print_gap_conclusion
+)
 
 # ----------------------------------------------------------------
 # Update this path to wherever your dataset files are stored locally
@@ -73,7 +77,14 @@ def main():
     xgb_fe_model = train_xgboost(X_train_fe, y_train_fe)
     xgb_fe_results = evaluate_model(xgb_fe_model, X_test_fe, y_test_fe, "XGBoost + Feature Engineering")
 
-    # --- 8. Final comparison + conclusion ---
+    # --- 8. Gap experiments (what the paper did not test) ---
+    # Number of rows in KDDTrain+ (needed to split the merged data back into the official files)
+    n_train_rows = sum(1 for _ in open(TRAIN_FILE))
+    cv_results = run_cross_validation(df_selected)
+    official_results = run_official_split_test(df_selected, n_train_rows)
+    print_gap_summary(dt_results, rf_results, cv_results, official_results)
+
+    # --- 9. Final comparison + conclusion ---
     your_results = {
         "DT (Yours)": dt_results,
         "RF (Yours)": rf_results,
@@ -82,6 +93,7 @@ def main():
     }
     build_comparison_table(your_results)
     print_explanation()
+    print_gap_conclusion(cv_results, official_results)
 
 
 if __name__ == "__main__":

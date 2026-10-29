@@ -1,6 +1,22 @@
-node_modules/
-dist/
-.angular/
+# Node.js / Angular
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
 .venv/
+venv/
+env/
+
+# Environment variables and secrets
+.env
+.env.*
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# IDE settings (optional)
+.vscode/

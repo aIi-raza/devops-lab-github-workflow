@@ -280,3 +280,11 @@ html.cursor-on input, html.cursor-on textarea { cursor: text !important; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* Selective triage: probability track and check list */
+.prob-track { position: relative; height: 10px; border-radius: 6px; background: var(--fill); border: 1px solid var(--line); margin: 6px 0 2px; }
+.prob-zone { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--danger) 22%, transparent); }
+.prob-marker { position: absolute; top: -4px; width: 4px; height: 16px; margin-left: -2px; border-radius: 2px; background: var(--ink); }
+.check-list { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 6px; font-size: 14px; }
+.check-list li.ok b { color: var(--success, #2f7d57); }
+.check-list li.no b { color: var(--danger); }

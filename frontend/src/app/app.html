@@ -298,24 +298,24 @@
                   <div class="triage-concept-box">
                     <div class="badge badge-muted">Traditional Approach (Paper)</div>
                     <p class="small muted">Forces 100% classification. Drops outliers with Cook's distance to inflate scores. Fails on ambiguous border cases.</p>
-                    <div class="bar-visual"><span class="bar-full">100% Forced Guessing (99.3% accuracy)</span></div>
+                    <div class="bar-visual"><span class="bar-full">100% Forced Guessing (99.65% accuracy)</span></div>
                   </div>
                   <div class="triage-concept-box highlight">
                     <div class="badge badge-normal">Our Novelty (Dual-Model Consensus)</div>
-                    <p class="small muted">Automates 97% of high-confidence traffic at 99.94% accuracy. The 3% ambiguous cases are safely triaged.</p>
+                    <p class="small muted">Automates about 99% of traffic at 99.9% accuracy. The roughly 1% where the models disagree or are unsure is routed to a human.</p>
                     <div class="bar-visual-dual">
                       <span class="bar-auto">97% Automated (99.9% Acc)</span>
-                      <span class="bar-triage">3% Triage</span>
+                      <span class="bar-triage">~1% Triage</span>
                     </div>
                   </div>
                 </div>
 
                 <div class="margin-slider-wrap">
                   <label class="field-label" for="margin-range">
-                    <span>Uncertainty Margin Delta (δ): <strong>±{{ (triageMargin() * 100).toFixed(0) }}%</strong></span>
-                    <small class="muted">Packets within 50% ± δ probability are flagged as ambiguous for human review.</small>
+                    <span>Unsure zone (δ): <strong>±{{ (triageMargin() * 100).toFixed(0) }}%</strong> around 50%</span>
+                    <small class="muted" style="display:block;margin-top:4px">If a model's attack probability is between {{ ((0.5 - triageMargin()) * 100).toFixed(0) }}% and {{ ((0.5 + triageMargin()) * 100).toFixed(0) }}%, it counts as unsure and the packet goes to triage. Move the slider and the results below update.</small>
                   </label>
-                  <input id="margin-range" type="range" min="0.02" max="0.25" step="0.01" [value]="triageMargin()" (input)="setTriageMargin($event)" />
+                  <input id="margin-range" type="range" min="0.02" max="0.45" step="0.01" [value]="triageMargin()" (input)="setTriageMargin($event)" />
                 </div>
               </div>
             </section>
@@ -329,9 +329,16 @@
                   <p>Runs RF and XGBoost simultaneously on your active form values.</p>
                 </header>
                 <div class="card-body">
-                  <p class="muted small">Uses the 25 connection parameters set in the Predict tab. Change presets there or click below to evaluate.</p>
+                  <span class="field-label">Pick a packet</span>
+                  <div class="segmented">
+                    <button type="button" [class.active]="selectedScenario() === 'normal'" (click)="triageScenario('normal')">Normal</button>
+                    <button type="button" [class.active]="selectedScenario() === 'dos'" (click)="triageScenario('dos')">DoS-like</button>
+                    <button type="button" [class.active]="selectedScenario() === 'udp'" (click)="triageScenario('udp')">UDP</button>
+                    <button type="button" [class.active]="selectedScenario() === 'borderline'" (click)="triageScenario('borderline')">Models disagree</button>
+                  </div>
+                  <p class="muted small">{{ scenarios[selectedScenario()].description }}</p>
                   <button class="btn btn-primary btn-block" type="button" [disabled]="triageBusy() || inferenceModels().length === 0" (click)="runTriagePrediction()">
-                    @if (triageBusy()) { <span class="icon spin" aria-hidden="true">progress_activity</span> Evaluating… } @else { Run Dual-Model Consensus }
+                    @if (triageBusy()) { <span class="icon spin" aria-hidden="true">progress_activity</span> Evaluating… } @else { Run both models }
                   </button>
 
                   @if (triageError()) { <div class="alert alert-danger" role="alert"><span class="icon" aria-hidden="true">error</span><p>{{ triageError() }}</p></div> }
@@ -340,22 +347,28 @@
                     <div class="result" aria-live="polite">
                       <div class="result-top">
                         <span class="badge" [class.badge-attack]="tr.decision === 'Attack'" [class.badge-normal]="tr.decision === 'Normal'" [class.badge-muted]="tr.decision === 'Triage'">
-                          <i></i>{{ tr.decision === 'Triage' ? '⚡ Triage Required' : tr.decision + ' (Automated)' }}
+                          <i></i>{{ tr.decision === 'Triage' ? 'Sent to triage' : tr.decision + ' (automatic)' }}
                         </span>
-                        <span class="muted small">{{ tr.status }}</span>
                       </div>
-                      <p class="result-title">{{ tr.reason }}</p>
-                      
-                      <div class="triage-model-duo">
-                        <div class="triage-model-card">
-                          <strong>Random Forest</strong>
-                          <span class="mono">{{ tr.rf.prediction }} ({{ (tr.rf.probability * 100).toFixed(1) }}%)</span>
+                      <p class="result-title">{{ tr.decision === 'Triage' ? 'Not sure: a human should check this packet.' : (tr.decision === 'Attack' ? 'Attack, decided automatically.' : 'Normal, decided automatically.') }}</p>
+
+                      @for (m of [{ name: 'Random Forest', d: tr.rf }, { name: 'XGBoost', d: tr.xgb }]; track m.name) {
+                        <div class="triage-model-card" style="margin-top:12px">
+                          <strong>{{ m.name }} says: {{ m.d.prediction }}</strong>
+                          <span class="small muted">Attack probability: <span class="mono">{{ probPct(m.d.probability) }}%</span></span>
+                          <div class="prob-track" aria-hidden="true">
+                            <span class="prob-zone" [style.left.%]="(0.5 - tr.margin) * 100" [style.width.%]="tr.margin * 200"></span>
+                            <span class="prob-marker" [style.left.%]="m.d.probability * 100"></span>
+                          </div>
+                          <span class="small muted">0% attack ◂ shaded = unsure zone ▸ 100% attack</span>
                         </div>
-                        <div class="triage-model-card">
-                          <strong>XGBoost</strong>
-                          <span class="mono">{{ tr.xgb.prediction }} ({{ (tr.xgb.probability * 100).toFixed(1) }}%)</span>
-                        </div>
-                      </div>
+                      }
+
+                      <ul class="check-list">
+                        <li [class.ok]="tr.consensus" [class.no]="!tr.consensus">Do both models agree? <b>{{ tr.consensus ? 'Yes' : 'No, they disagree' }}</b></li>
+                        <li [class.ok]="outsideZone(tr.rf.probability, tr.margin) && outsideZone(tr.xgb.probability, tr.margin)" [class.no]="!(outsideZone(tr.rf.probability, tr.margin) && outsideZone(tr.xgb.probability, tr.margin))">Are both outside the unsure zone? <b>{{ (outsideZone(tr.rf.probability, tr.margin) && outsideZone(tr.xgb.probability, tr.margin)) ? 'Yes' : 'No, at least one is unsure' }}</b></li>
+                        <li><b>Result:</b> {{ tr.decision === 'Triage' ? 'both checks must pass to automate, so this goes to a human.' : 'both checks passed, so it is decided automatically.' }}</li>
+                      </ul>
                     </div>
                   }
                 </div>
@@ -370,6 +383,7 @@
                 <div class="card-body">
                   <div class="file-line"><span class="icon" aria-hidden="true">description</span><span>{{ selectedCsv()?.name ?? 'No CSV selected yet' }}</span></div>
                   <div class="btn-row">
+                    <button class="btn btn-outline" type="button" (click)="loadSampleCsv('sample_triage_demo.csv')">Load demo file (54 rows)</button>
                     <label class="btn btn-outline" for="triage-csv-upload">Choose CSV<input id="triage-csv-upload" class="sr-file" type="file" accept=".csv,text/csv" (change)="chooseCsv($event)" /></label>
                     <button class="btn btn-primary" type="button" [disabled]="triageCsvBusy() || !selectedCsv() || inferenceModels().length === 0" (click)="runTriageCsv()">
                       @if (triageCsvBusy()) { <span class="icon spin" aria-hidden="true">progress_activity</span> Analyzing… } @else { Run Batch Triage }
@@ -389,6 +403,16 @@
                   <article class="stat"><span>Triage deferred</span><strong class="t-bad"><span [appCountUp]="tc.triage_percent">0</span>%</strong><small>{{ tc.triage_count }} border cases</small></article>
                   <article class="stat"><span>Selective accuracy</span><strong class="t-ok">@if (tc.metrics) { {{ formatPercent(tc.metrics.selective_accuracy) }} } @else { — }</strong><small>On automated subset</small></article>
                 </div>
+
+                @if (tc.forced_accuracy !== undefined && tc.triage_count > 0) {
+                  <section class="card">
+                    <header class="card-head"><h3>Why triage helps</h3><p>The same Random Forest, with and without the option to say "not sure".</p></header>
+                    <div class="card-body">
+                      <p>Forced to guess on all {{ tc.total_records }} rows, it is right <b>{{ formatPercent(tc.forced_accuracy) }}</b> of the time.</p>
+                      <p>On just the {{ tc.triage_count }} rows sent to triage, guessing would be right only <b>{{ formatPercent(tc.triage_forced_accuracy ?? 0) }}</b> of the time, so those are the packets worth a human look.</p>
+                    </div>
+                  </section>
+                }
 
                 @if (tc.metrics) {
                   <section class="card">

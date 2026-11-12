@@ -52,6 +52,8 @@ type TriageCsvResult = {
   margin: number;
   records: TriageRecord[];
   metrics?: SelectiveMetrics;
+  forced_accuracy?: number;
+  triage_forced_accuracy?: number;
 };
 type CsvResult = {
   model: string;
@@ -154,6 +156,11 @@ const SCENARIOS: Record<string, { title: string; description: string; features: 
     title: 'DoS-like connection pattern',
     description: 'A sample pattern with repeated rejected connections. It is a demonstration scenario, not a guarantee of an attack prediction.',
     features: { ...DEFAULT_FEATURES, protocol_type: 'tcp', service: 'private', flag: 'REJ', src_bytes: 0, dst_bytes: 0, logged_in: 0, count: 229, srv_count: 10, same_srv_rate: 0.04, diff_srv_rate: 0.06, dst_host_count: 255, dst_host_srv_count: 10, dst_host_same_srv_rate: 0.04, dst_host_diff_srv_rate: 0.06, dst_host_rerror_rate: 1, dst_host_srv_rerror_rate: 1 },
+  },
+  borderline: {
+    title: 'Borderline record (models disagree)',
+    description: 'A real record from the dataset where Random Forest and XGBoost give opposite answers. Use it on the Selective Triage tab to see a triage in action.',
+    features: { ...DEFAULT_FEATURES, protocol_type: 'udp', service: 'private', flag: 'SF', src_bytes: 0, dst_bytes: 0, logged_in: 0, count: 1, srv_count: 1, same_srv_rate: 1, dst_host_count: 4, dst_host_srv_count: 1, dst_host_same_srv_rate: 0.25, dst_host_diff_srv_rate: 0.5, dst_host_same_src_port_rate: 0.25 },
   },
   udp: {
     title: 'Short UDP message',
@@ -561,8 +568,31 @@ export class App implements AfterViewInit {
     }
   }
 
+  private triageTimer: ReturnType<typeof setTimeout> | undefined;
+
   setTriageMargin(event: Event): void {
     const val = Number((event.target as HTMLInputElement).value || 0.10);
     this.triageMargin.set(val);
+    // Re-run automatically so moving the slider visibly changes the result.
+    clearTimeout(this.triageTimer);
+    this.triageTimer = setTimeout(() => {
+      if (this.triageSingleResult() && !this.triageBusy()) void this.runTriagePrediction();
+      if (this.triageCsvResult() && this.selectedCsv() && !this.triageCsvBusy()) void this.runTriageCsv();
+    }, 250);
+  }
+
+  triageScenario(key: string): void {
+    this.useScenario(key);
+    this.triageSingleResult.set(null);
+    this.triageError.set('');
+    void this.runTriagePrediction();
+  }
+
+  outsideZone(prob: number, margin: number): boolean {
+    return Math.abs(prob - 0.5) >= margin - 1e-9;
+  }
+
+  probPct(x: number): string {
+    return (x * 100).toFixed(1);
   }
 }

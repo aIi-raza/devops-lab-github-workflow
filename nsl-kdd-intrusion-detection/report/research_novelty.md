@@ -12,7 +12,7 @@
 
 ## 1. Executive Summary
 
-Every existing benchmark on the NSL-KDD dataset published between 2009 and 2026 operates under a **forced-choice paradigm**: every single network flow record presented to a trained classifier must be stamped definitively as either **Normal (0)** or **Attack (1)**. Even when a model's underlying posterior probability is virtually a coin-flip (e.g., $P(\text{Attack}) = 0.51$), standard intrusion detection architectures force a deterministic judgment.
+Most NSL-KDD benchmarks we reviewed, including the reference paper, operate under a **forced-choice paradigm**: every single network flow record presented to a trained classifier must be stamped definitively as either **Normal (0)** or **Attack (1)**. Even when a model's underlying posterior probability is virtually a coin-flip (e.g., $P(\text{Attack}) = 0.51$), standard intrusion detection architectures force a deterministic judgment.
 
 In a real Security Operations Center (SOC), forced classification on borderline records introduces high operational costs:
 1. **False Positives (Type I errors):** Legitimate customer or business connections are interrupted or blacklisted by automated firewall rules.
@@ -80,26 +80,36 @@ Unlike standard benchmarks that report only whole-dataset accuracy, our triage s
 
 ## 4. Experimental Results and Empirical Validation
 
-### 4.1 Comparative Benchmark on NSL-KDD Test Partition
+All numbers below are produced by `src/triage_analysis.py` on the 20% stratified holdout (29,704 rows, `random_state=42`), using the saved Random Forest and XGBoost artifacts. Re-run it to reproduce them.
 
-| Model Configuration | Strategy | Coverage ($\mathcal{C}$) | Accuracy ($\mathcal{A}_{\text{sel}}$) | Precision | Recall | F1-Score |
-|---|---|---|---|---|---|---|
-| **Avcı & Koca (2023) RF** | Forced (Cook's outliers dropped) | 100.0% | 99.72% | 99.84% | 99.56% | 99.70% |
-| **Baseline Decision Tree** | Forced (All 148k records) | 100.0% | 99.19% | 99.12% | 99.19% | 99.15% |
-| **Baseline Random Forest** | Forced (All 148k records) | 100.0% | 99.38% | 99.42% | 99.30% | 99.36% |
-| **Baseline XGBoost** | Forced (All 148k records) | 100.0% | 99.61% | 99.66% | 99.53% | 99.59% |
-| **Dual-Model Consensus ($\delta = 0.05$)** | **Selective Triage** | **98.2%** | **99.87%** | **99.91%** | **99.82%** | **99.86%** |
-| **Dual-Model Consensus ($\delta = 0.10$)** | **Selective Triage** | **96.9%** | **99.94%** | **99.96%** | **99.92%** | **99.94%** |
+### 4.1 Forced vs. Selective Classification
 
-### 4.2 Correlation with NSL-KDD Inherent Difficulty Scores
+| Configuration | Strategy | Coverage | Accuracy on decided rows |
+|---|---|---|---|
+| Avci & Koca (2023) RF (as reported) | Forced, Cook's-distance outliers dropped | 100% | 99.72% |
+| Our Decision Tree | Forced, all rows | 100% | 99.24% |
+| Our Random Forest | Forced, all rows | 100% | 99.45% |
+| Our XGBoost | Forced, all rows | 100% | 99.65% |
+| Dual-model consensus, delta = 0.00 | Selective triage | 99.54% | 99.78% |
+| Dual-model consensus, delta = 0.05 | Selective triage | 99.40% | 99.84% |
+| Dual-model consensus, delta = 0.10 | Selective triage | 99.24% | 99.89% |
 
-The official NSL-KDD dataset contains a known sample attribute: the **Difficulty Level** (ranging from 1 to 21), representing the number of diverse learning algorithms that originally misclassified each record in benchmark validation.
+At delta = 0.10, 227 of 29,704 rows (0.76%) go to triage. On those rows Random Forest alone would have been right only 42.7% of the time, so the automated zone drops from 66 errors (delta = 0) to 33.
 
-Our empirical analysis reveals a definitive finding:
-* In the subset of records where Random Forest and XGBoost **agreed** (the Automated Zone), the average sample difficulty score is **$1.8 / 21$** (indicating clean, unambiguous network connections).
-* In the subset of records flagged for **Triage**, the average sample difficulty score is **$17.4 / 21$**. Over **84.3%** of all triage-routed records represent stealthy User-to-Root (`U2R`) and Remote-to-Local (`R2L`) attacks that mimic benign connection profiles.
+### 4.2 Relation to the NSL-KDD Difficulty Score
 
-**Significance:** Our dual-model disagreement mechanism does not drop random records; it isolates the exact historical edge cases that confuse artificial intelligence.
+The NSL-KDD difficulty value (1-21) is the number of reference classifiers that classified the record correctly, so a LOW value means a HARD record.
+
+| Group (delta = 0.10) | Mean difficulty value | Meaning |
+|---|---|---|
+| Automated (models agree, confident) | 19.35 | almost every reference classifier got these right |
+| Triage (disagree / uncertain) | 10.34 | roughly half the reference classifiers got these wrong |
+
+Triaged rows are about 45% normal, 41% U2R/R2L and 14% DoS/Probe, so triage is not only stealth attacks; it also catches normal traffic that looks suspicious.
+
+### 4.3 Limitations
+
+Only 0.76% of rows are triaged, so the accuracy gain is small in absolute terms (99.65% forced XGBoost to 99.89% on decided rows). The novelty is the workflow (abstain on disagreement and measure it against difficulty), not a new accuracy record. Selective classification and ensemble-disagreement rejection are established ideas in general ML; the claim here is limited to applying and evaluating them on NSL-KDD with the difficulty score, which still needs a literature check before calling it unpublished.
 
 ---
 

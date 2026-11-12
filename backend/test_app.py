@@ -44,4 +44,29 @@ class ApiTests(unittest.TestCase):
         r=self.client.post('/api/triage/csv',data={'file':(io.BytesIO(b''),'empty.csv')},content_type='multipart/form-data')
         self.assertEqual(r.status_code,400)
 
+import json, pathlib
+from app import _bundles
+READY = 'random_forest' in _bundles and 'xgboost' in _bundles
+BORDERLINE = {"duration":0,"protocol_type":"udp","service":"private","flag":"SF","src_bytes":0,"dst_bytes":0,"wrong_fragment":0,"hot":0,"num_failed_logins":0,"logged_in":0,"count":1,"srv_count":1,"serror_rate":0.0,"same_srv_rate":1.0,"diff_srv_rate":0.0,"dst_host_count":4,"dst_host_srv_count":1,"dst_host_same_srv_rate":0.25,"dst_host_diff_srv_rate":0.5,"dst_host_same_src_port_rate":0.25,"dst_host_srv_diff_host_rate":0.0,"dst_host_serror_rate":0.0,"dst_host_srv_serror_rate":0.0,"dst_host_rerror_rate":0.0,"dst_host_srv_rerror_rate":0.0}
+DEMO = pathlib.Path(__file__).resolve().parents[1] / 'frontend' / 'public' / 'samples' / 'sample_triage_demo.csv'
+
+@unittest.skipUnless(READY, 'model artifacts not available')
+class TriageBehaviourTests(unittest.TestCase):
+    def setUp(self): self.client = app.test_client()
+    def test_models_disagree_goes_to_triage(self):
+        r = self.client.post('/api/triage', json={'features': BORDERLINE, 'margin': 0.10}).get_json()
+        self.assertFalse(r['consensus']); self.assertEqual(r['status'], 'TRIAGE'); self.assertEqual(r['decision'], 'Triage')
+    def test_large_margin_forces_triage_on_agreeing_models(self):
+        feats = dict(BORDERLINE, protocol_type='tcp', service='http', flag='SF', src_bytes=232, dst_bytes=8153, logged_in=1)
+        low = self.client.post('/api/triage', json={'features': feats, 'margin': 0.02}).get_json()
+        high = self.client.post('/api/triage', json={'features': feats, 'margin': 0.49}).get_json()
+        self.assertEqual(high['status'], 'TRIAGE')
+        if low['consensus']: self.assertEqual(low['status'], 'AUTOMATED')
+    def test_demo_csv_has_triage_rows_and_margin_matters(self):
+        def run(m):
+            return self.client.post('/api/triage/csv', data={'file': (io.BytesIO(DEMO.read_bytes()), 'demo.csv'), 'margin': str(m)}, content_type='multipart/form-data').get_json()
+        a, b = run(0.10), run(0.40)
+        self.assertGreater(a['triage_count'], 0); self.assertGreaterEqual(b['triage_count'], a['triage_count'])
+        self.assertIn('forced_accuracy', a); self.assertLess(a['triage_forced_accuracy'], a['forced_accuracy'])
+
 if __name__=='__main__': unittest.main()

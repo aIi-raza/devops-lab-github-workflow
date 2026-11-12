@@ -772,6 +772,16 @@ def triage_csv():
             "records": records,
         }
 
+        if labels is not None and total:
+            forced_hits = [
+                1 if (1 if r["rf_prediction"] == "Attack" else 0) == t else 0
+                for r, t in zip(records, labels)
+            ]
+            response["forced_accuracy"] = sum(forced_hits) / total
+            tri_hits = [h for h, r in zip(forced_hits, records) if r["status"] == "TRIAGE"]
+            if tri_hits:
+                response["triage_forced_accuracy"] = sum(tri_hits) / len(tri_hits)
+
         if labels is not None and automated_labels:
             response["metrics"] = {
                 "selective_accuracy": accuracy_score(automated_labels, automated_preds),

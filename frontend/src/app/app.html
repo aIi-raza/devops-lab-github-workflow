@@ -427,8 +427,8 @@
                 }
 
                 <section class="card">
-                  <header class="card-head"><h3>Triage Breakdown (First 100 Rows)</h3><p>Shows how individual records were classified or deferred.</p></header>
-                  <div class="table-wrap"><table class="table"><thead><tr><th>Row</th><th>Consensus Decision</th><th>RF Prediction</th><th>XGB Prediction</th><th>Actual Label</th><th>Status</th></tr></thead><tbody>
+                  <header class="card-head"><h3>Triage Breakdown (First 100 Rows)</h3><p>Each model gives a vote and an attack chance. Both must agree and sit outside the unsure zone to be automated; otherwise the row goes to triage.</p></header>
+                  <div class="table-wrap"><table class="table"><thead><tr><th>Row</th><th>Final decision</th><th>Random Forest (vote · attack chance)</th><th>XGBoost (vote · attack chance)</th><th>Truth</th><th>Status</th></tr></thead><tbody>
                     @for (r of visibleTriageRecords(); track r.row) {
                       <tr>
                         <td class="mono">{{ r.row }}</td>
@@ -437,8 +437,8 @@
                             <i></i>{{ r.decision }}
                           </span>
                         </td>
-                        <td class="mono">{{ r.rf_prediction }} ({{ (r.rf_prob * 100).toFixed(1) }}%)</td>
-                        <td class="mono">{{ r.xgb_prediction }} ({{ (r.xgb_prob * 100).toFixed(1) }}%)</td>
+                        <td class="mono">{{ r.rf_prediction }} · {{ (r.rf_prob * 100).toFixed(1) }}% attack</td>
+                        <td class="mono">{{ r.xgb_prediction }} · {{ (r.xgb_prob * 100).toFixed(1) }}% attack</td>
                         <td>{{ displayedLabel(r.actual_label) }}</td>
                         <td><span class="badge" [class.badge-normal]="r.status === 'AUTOMATED'" [class.badge-muted]="r.status === 'TRIAGE'">{{ r.status }}</span></td>
                       </tr>

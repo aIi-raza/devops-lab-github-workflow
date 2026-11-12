@@ -8,6 +8,7 @@ With the workbench you can:
 - **Predict a single record**: fill in 25 NSL-KDD features (or start from a preset) and get Normal/Attack with class probabilities
 - **Analyse a CSV**: upload a file for per-row predictions, counts, and accuracy/precision/recall/F1 if labels are included
 - **Compare models**: run 2-3 trained models on the same CSV, side by side
+- **Dual-Model Selective Triage (Novelty)**: pair Random Forest (Bagging) and XGBoost (Boosting) to automate clear consensus (>99.9% accuracy) and route ambiguous or disagreeing packets to human triage
 
 > GitHub Pages only hosts the static frontend. Predictions need the Flask backend running with locally trained model artifacts, so the live site shows "API unavailable" unless you run the backend yourself. The interface never invents predictions.
 
@@ -128,6 +129,8 @@ The web form and CSV upload both use the **raw** NSL-KDD features. Encoding, sca
 | POST | `/api/predict` | Predict a single record (JSON) |
 | POST | `/api/predict/csv` | Predict every row of an uploaded CSV |
 | POST | `/api/preprocess/csv` | Convert a raw-feature CSV to a model's numeric input format (API only, not in the UI) |
+| POST | `/api/triage` | Dual-model consensus prediction with selective triage (JSON) |
+| POST | `/api/triage/csv` | Dual-model batch CSV triage with selective accuracy & coverage metrics |
 
 **Single record** (`POST /api/predict`):
 

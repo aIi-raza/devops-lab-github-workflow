@@ -136,9 +136,9 @@ html.cursor-on input, html.cursor-on textarea { cursor: text !important; }
 .model-select > span:first-child { font-size: 12px; font-weight: 500; color: var(--ink-muted); }
 
 /* Tabs */
-.tabs { position: relative; display: inline-grid; grid-template-columns: repeat(3, 1fr); padding: 4px; margin-bottom: 24px; border-radius: 10px; background: var(--fill); max-width: 100%; }
-.tab-thumb { position: absolute; top: 4px; left: 4px; width: calc((100% - 8px) / 3); height: calc(100% - 8px); border-radius: 7px; background: var(--bg); box-shadow: 0 1px 2px rgba(0,0,0,.12); transition: transform .32s cubic-bezier(.3,.8,.2,1); }
-.tabs button { position: relative; z-index: 1; min-width: 150px; padding: 7px 16px; border: 0; border-radius: 7px; background: transparent; color: var(--ink-muted); font-size: 13.5px; font-weight: 500; transition: color .2s; }
+.tabs { position: relative; display: inline-grid; grid-template-columns: repeat(4, 1fr); padding: 4px; margin-bottom: 24px; border-radius: 10px; background: var(--fill); max-width: 100%; }
+.tab-thumb { position: absolute; top: 4px; left: 4px; width: calc((100% - 8px) / 4); height: calc(100% - 8px); border-radius: 7px; background: var(--bg); box-shadow: 0 1px 2px rgba(0,0,0,.12); transition: transform .32s cubic-bezier(.3,.8,.2,1); }
+.tabs button { position: relative; z-index: 1; min-width: 130px; padding: 7px 14px; border: 0; border-radius: 7px; background: transparent; color: var(--ink-muted); font-size: 13.5px; font-weight: 500; transition: color .2s; }
 .tabs button.active { color: var(--ink); }
 
 /* Layout */

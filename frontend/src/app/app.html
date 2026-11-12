@@ -14,7 +14,7 @@
         <button type="button" [class.active]="activeView() === 'single'" (pointerenter)="moveNavPill($any($event.currentTarget))" (click)="navigate('single')">Predict</button>
         <button type="button" [class.active]="activeView() === 'batch'" (pointerenter)="moveNavPill($any($event.currentTarget))" (click)="navigate('batch')">CSV analysis</button>
         <button type="button" [class.active]="activeView() === 'comparison'" (pointerenter)="moveNavPill($any($event.currentTarget))" (click)="navigate('comparison')">Compare</button>
-        <button type="button" [class.active]="activeView() === 'triage'" (pointerenter)="moveNavPill($any($event.currentTarget))" (click)="navigate('triage')">⚡ Novelty Triage</button>
+        <button type="button" [class.active]="activeView() === 'triage'" (pointerenter)="moveNavPill($any($event.currentTarget))" (click)="navigate('triage')">Selective Triage</button>
       </nav>
       <div class="nav-actions">
         <span class="status" [class.online]="apiState() === 'online'" [class.offline]="apiState() === 'offline'" [title]="apiLabel()"><i></i><span>{{ apiLabel() }}</span></span>
@@ -87,7 +87,7 @@
           <button type="button" role="tab" [attr.aria-selected]="activeView() === 'single'" [class.active]="activeView() === 'single'" (click)="setView('single')">Single prediction</button>
           <button type="button" role="tab" [attr.aria-selected]="activeView() === 'batch'" [class.active]="activeView() === 'batch'" (click)="setView('batch')">CSV analysis</button>
           <button type="button" role="tab" [attr.aria-selected]="activeView() === 'comparison'" [class.active]="activeView() === 'comparison'" (click)="setView('comparison')">Model comparison</button>
-          <button type="button" role="tab" [attr.aria-selected]="activeView() === 'triage'" [class.active]="activeView() === 'triage'" (click)="setView('triage')">⚡ Novelty Triage</button>
+          <button type="button" role="tab" [attr.aria-selected]="activeView() === 'triage'" [class.active]="activeView() === 'triage'" (click)="setView('triage')">Selective Triage</button>
         </div>
 
         <!-- Single prediction -->
@@ -384,10 +384,10 @@
             @if (triageCsvResult(); as tc) {
               <div class="stack-lg" aria-live="polite">
                 <div class="stats">
-                  <article class="stat"><span>Total Records</span><strong [appCountUp]="tc.total_records">0</strong><small>Processed</small></article>
-                  <article class="stat"><span>Automated Coverage</span><strong class="t-ok" [appCountUp]="tc.coverage_percent">0</strong><small>{{ tc.automated_count }} of {{ tc.total_records }} records</small></article>
-                  <article class="stat"><span>Triage Deferred</span><strong class="t-bad" [appCountUp]="tc.triage_percent">0</strong><small>{{ tc.triage_count }} border cases</small></article>
-                  <article class="stat"><span>Selective Accuracy</span><strong class="t-ok">@if (tc.metrics) { {{ formatPercent(tc.metrics.selective_accuracy) }} } @else { — }</strong><small>On automated subset</small></article>
+                  <article class="stat"><span>Total records</span><strong [appCountUp]="tc.total_records">0</strong><small>Rows processed</small></article>
+                  <article class="stat"><span>Automated coverage</span><strong class="t-ok"><span [appCountUp]="tc.coverage_percent">0</span>%</strong><small>{{ tc.automated_count }} of {{ tc.total_records }} records</small></article>
+                  <article class="stat"><span>Triage deferred</span><strong class="t-bad"><span [appCountUp]="tc.triage_percent">0</span>%</strong><small>{{ tc.triage_count }} border cases</small></article>
+                  <article class="stat"><span>Selective accuracy</span><strong class="t-ok">@if (tc.metrics) { {{ formatPercent(tc.metrics.selective_accuracy) }} } @else { — }</strong><small>On automated subset</small></article>
                 </div>
 
                 @if (tc.metrics) {

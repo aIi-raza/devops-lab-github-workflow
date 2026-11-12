@@ -9,7 +9,7 @@ const API_URL = (globalThis as typeof globalThis & { NSLKDD_API_URL?: string }).
 
 type Theme = 'light' | 'dark';
 type Mode = 'single' | 'batch';
-type View = 'single' | 'batch' | 'comparison';
+type View = 'single' | 'batch' | 'comparison' | 'triage';
 type Prediction = {
   row?: number;
   predicted_class: number;
@@ -18,6 +18,41 @@ type Prediction = {
   probabilities?: { Normal: number; Attack: number };
 };
 type Metrics = { accuracy: number; precision: number; recall: number; f1: number };
+type SelectiveMetrics = { selective_accuracy: number; selective_precision: number; selective_recall: number; selective_f1: number };
+type TriageSingleResult = {
+  decision: 'Normal' | 'Attack' | 'Triage';
+  status: 'AUTOMATED' | 'TRIAGE';
+  consensus: boolean;
+  margin: number;
+  reason: string;
+  rf: { prediction: string; probability: number; probabilities: { Normal: number; Attack: number } };
+  xgb: { prediction: string; probability: number; probabilities: { Normal: number; Attack: number } };
+};
+type TriageRecord = {
+  row: number;
+  decision: 'Normal' | 'Attack' | 'Triage';
+  decision_class: number;
+  status: 'AUTOMATED' | 'TRIAGE';
+  consensus: boolean;
+  rf_prediction: string;
+  rf_prob: number;
+  xgb_prediction: string;
+  xgb_prob: number;
+  actual_class?: number;
+  actual_label?: string;
+};
+type TriageCsvResult = {
+  total_records: number;
+  automated_count: number;
+  triage_count: number;
+  normal_count: number;
+  attack_count: number;
+  coverage_percent: number;
+  triage_percent: number;
+  margin: number;
+  records: TriageRecord[];
+  metrics?: SelectiveMetrics;
+};
 type CsvResult = {
   model: string;
   total_records: number;
@@ -160,6 +195,16 @@ export class App implements AfterViewInit {
   readonly comparisonError = signal('');
   readonly comparisonResults = signal<ComparisonRow[] | null>(null);
   readonly selectedComparisonModels = signal<string[]>(['random_forest', 'xgboost']);
+
+  // Triage state
+  readonly triageMargin = signal<number>(0.10);
+  readonly triageBusy = signal(false);
+  readonly triageError = signal('');
+  readonly triageSingleResult = signal<TriageSingleResult | null>(null);
+  readonly triageCsvBusy = signal(false);
+  readonly triageCsvError = signal('');
+  readonly triageCsvResult = signal<TriageCsvResult | null>(null);
+  readonly visibleTriageRecords = computed(() => (this.triageCsvResult()?.records ?? []).slice(0, 100));
   readonly visibleRecords = computed(() => (this.csvResult()?.records ?? []).slice(0, 100));
   readonly totalFeatures = FEATURE_GROUPS.reduce((sum, group) => sum + group.fields.length, 0);
   readonly apiLabel = computed(() => this.apiState() === 'online' ? 'Inference API connected' : this.apiState() === 'checking' ? 'Checking API' : 'API unavailable');
@@ -469,5 +514,55 @@ export class App implements AfterViewInit {
 
   hasComparisonMetrics(rows: ComparisonRow[]): boolean {
     return rows.some((row) => !!row.metrics);
+  }
+
+  async runTriagePrediction(): Promise<void> {
+    if (!this.inferenceModels().length) {
+      this.triageError.set('The inference API is unavailable. Start the Flask backend and confirm model artifacts are loaded.');
+      return;
+    }
+    this.triageBusy.set(true);
+    this.triageError.set('');
+    this.triageSingleResult.set(null);
+    try {
+      const response = await fetch(`${API_URL}/api/triage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ margin: this.triageMargin(), features: this.features() }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? `Triage failed (${response.status})`);
+      this.triageSingleResult.set(body as TriageSingleResult);
+    } catch (error) {
+      this.triageError.set(error instanceof Error ? error.message : 'Triage request failed.');
+    } finally {
+      this.triageBusy.set(false);
+    }
+  }
+
+  async runTriageCsv(): Promise<void> {
+    const file = this.selectedCsv();
+    if (!file) { this.triageCsvError.set('Choose a CSV file or load a sample first.'); return; }
+    this.triageCsvBusy.set(true);
+    this.triageCsvError.set('');
+    this.triageCsvResult.set(null);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('margin', String(this.triageMargin()));
+      const response = await fetch(`${API_URL}/api/triage/csv`, { method: 'POST', body: form });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? `Triage CSV analysis failed (${response.status})`);
+      this.triageCsvResult.set(body as TriageCsvResult);
+    } catch (error) {
+      this.triageCsvError.set(error instanceof Error ? error.message : 'Triage CSV analysis failed.');
+    } finally {
+      this.triageCsvBusy.set(false);
+    }
+  }
+
+  setTriageMargin(event: Event): void {
+    const val = Number((event.target as HTMLInputElement).value || 0.10);
+    this.triageMargin.set(val);
   }
 }

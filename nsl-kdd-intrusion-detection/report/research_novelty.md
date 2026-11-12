@@ -112,19 +112,6 @@ The proposed novelty is implemented end-to-end across the full-stack workbench:
 
 ---
 
-## 6. Viva Defense Guide (Anticipated Reviewer Questions)
-
-### Q1: "Is this novelty simply an ensemble voting classifier?"
-> **Response:** No. An ensemble voting classifier (such as a hard or soft voting blend) still forces a binary decision: it averages the two probabilities and still outputs Normal or Attack on 100% of the data. Our contribution is **Selective Classification**: we explicitly reject forcing a prediction when the two fundamentally distinct ensemble paradigms (bagging vs boosting) clash or express high uncertainty.
-
-### Q2: "Isn't your higher accuracy just an artifact of dropping difficult records?"
-> **Response:** No. We do not drop or delete any records. In Avcı & Koca (2023), outliers were silently dropped from the training set via Cook's distance, meaning the system never learns to detect them. In our system, 100% of records are processed: 97% are handled automatically at microsecond speed with 99.94% accuracy, while the remaining 3% are intentionally escalated to human analysts. This directly reflects operational zero-trust security architecture.
-
-### Q3: "Why did you choose Random Forest and XGBoost specifically for the pair?"
-> **Response:** Because of architectural diversity. Random Forest is a **bagging ensemble** of deep, uncorrelated decision trees that reduces variance; XGBoost is a **gradient boosting ensemble** of shallow trees that iteratively minimizes residual errors to reduce bias. When two mathematically diverse algorithms agree with strong margins, the probability of error is negligible.
-
----
-
 ## 7. Conclusion
 
 By shifting the paradigm from **forced prediction** to **consensus-driven selective triage**, this work resolves the historical tradeoff between accuracy and outlier handling on NSL-KDD. It offers both a clean academic novelty for peer-reviewed publication and an operationally viable model for real-world Security Operations Centers.

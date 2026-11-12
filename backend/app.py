@@ -578,6 +578,218 @@ def predict_csv():
         return jsonify(error=f"Invalid CSV/input: {exc}"), 400
 
 
+@app.post("/api/triage")
+def triage_predict():
+    """
+    Novel Dual-Model Consensus & Selective Triage endpoint.
+    Evaluates Random Forest (bagging) and XGBoost (boosting) simultaneously.
+    If models disagree or confidence falls within margin delta, flags for TRIAGE.
+    """
+    body = request.get_json(silent=True)
+
+    if not isinstance(body, dict) or not isinstance(body.get("features"), dict):
+        return jsonify(error="JSON body must contain a 'features' object."), 400
+
+    features = body["features"]
+    margin = float(body.get("margin", 0.10))
+
+    validation_error = validate_features_without_bundle(features, "raw")
+    if validation_error:
+        return jsonify(error=validation_error), 400
+
+    required_models = ["random_forest", "xgboost"]
+    missing = [m for m in required_models if m not in _bundles]
+    if missing:
+        return (
+            jsonify(
+                error=f"Triage requires Random Forest and XGBoost artifacts: {missing} unavailable.",
+                prediction_ready=False,
+            ),
+            503,
+        )
+
+    try:
+        frame = pd.DataFrame([features])
+        rf_rows = predict_frame("random_forest", frame, "raw")
+        xgb_rows = predict_frame("xgboost", frame, "raw")
+
+        rf_item = rf_rows[0]
+        xgb_item = xgb_rows[0]
+
+        rf_prob = rf_item["probabilities"]["Attack"]
+        xgb_prob = xgb_item["probabilities"]["Attack"]
+
+        rf_class = rf_item["predicted_class"]
+        xgb_class = xgb_item["predicted_class"]
+
+        agreement = (rf_class == xgb_class)
+        rf_margin_ok = abs(rf_prob - 0.5) >= margin
+        xgb_margin_ok = abs(xgb_prob - 0.5) >= margin
+
+        if agreement and rf_margin_ok and xgb_margin_ok:
+            decision = "Attack" if rf_class == 1 else "Normal"
+            status = "AUTOMATED"
+            reason = "High consensus: both models agree with confidence margin >= " f"{margin:.2f}."
+        else:
+            decision = "Triage"
+            status = "TRIAGE"
+            if not agreement:
+                reason = "Inter-model disagreement: Random Forest and XGBoost predicted differing classes."
+            else:
+                reason = f"Uncertainty detected: confidence margin is within boundary delta ({margin:.2f})."
+
+        return jsonify(
+            decision=decision,
+            status=status,
+            consensus=agreement,
+            margin=margin,
+            reason=reason,
+            rf={
+                "prediction": rf_item["prediction"],
+                "probability": rf_prob,
+                "probabilities": rf_item["probabilities"],
+            },
+            xgb={
+                "prediction": xgb_item["prediction"],
+                "probability": xgb_prob,
+                "probabilities": xgb_item["probabilities"],
+            },
+        )
+
+    except KeyError as exc:
+        return jsonify(error=str(exc).strip("'")), 400
+    except RuntimeError as exc:
+        return jsonify(error=str(exc), prediction_ready=False), 503
+    except Exception as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.post("/api/triage/csv")
+def triage_csv():
+    """
+    Batch CSV Triage analysis.
+    Evaluates every row with both Random Forest and XGBoost, outputting
+    Automated Coverage, Selective Accuracy, and Triage Rate.
+    """
+    try:
+        frame = read_csv_upload(request.files.get("file"))
+        frame, actual = extract_ground_truth(frame)
+        margin = float(request.form.get("margin", 0.10))
+
+        if "random_forest" not in _bundles or "xgboost" not in _bundles:
+            return (
+                jsonify(
+                    error="Triage requires Random Forest and XGBoost artifacts to be loaded.",
+                    prediction_ready=False,
+                ),
+                503,
+            )
+
+        if actual is not None:
+            labels = [
+                parse_ground_truth(value, i + 2)
+                for i, value in enumerate(actual)
+            ]
+        else:
+            labels = None
+
+        rf_rows = predict_frame("random_forest", frame, "raw")
+        xgb_rows = predict_frame("xgboost", frame, "raw")
+
+        records = []
+        automated_labels = []
+        automated_preds = []
+
+        total = len(rf_rows)
+        automated_count = 0
+        triage_count = 0
+        normal_count = 0
+        attack_count = 0
+
+        for i in range(total):
+            rf_item = rf_rows[i]
+            xgb_item = xgb_rows[i]
+
+            rf_prob = rf_item["probabilities"]["Attack"]
+            xgb_prob = xgb_item["probabilities"]["Attack"]
+            rf_class = rf_item["predicted_class"]
+            xgb_class = xgb_item["predicted_class"]
+
+            agreement = (rf_class == xgb_class)
+            rf_ok = abs(rf_prob - 0.5) >= margin
+            xgb_ok = abs(xgb_prob - 0.5) >= margin
+
+            if agreement and rf_ok and xgb_ok:
+                decision = "Attack" if rf_class == 1 else "Normal"
+                decision_class = rf_class
+                status = "AUTOMATED"
+                automated_count += 1
+                if decision_class == 1:
+                    attack_count += 1
+                else:
+                    normal_count += 1
+
+                if labels is not None:
+                    automated_labels.append(labels[i])
+                    automated_preds.append(decision_class)
+            else:
+                decision = "Triage"
+                decision_class = -1
+                status = "TRIAGE"
+                triage_count += 1
+
+            rec = {
+                "row": i + 1,
+                "decision": decision,
+                "decision_class": decision_class,
+                "status": status,
+                "consensus": agreement,
+                "rf_prediction": rf_item["prediction"],
+                "rf_prob": rf_prob,
+                "xgb_prediction": xgb_item["prediction"],
+                "xgb_prob": xgb_prob,
+            }
+
+            if labels is not None:
+                truth = labels[i]
+                rec["actual_class"] = truth
+                rec["actual_label"] = "Attack" if truth else "Normal"
+
+            records.append(rec)
+
+        coverage = (automated_count / total * 100.0) if total else 0.0
+        triage_rate = (triage_count / total * 100.0) if total else 0.0
+
+        response = {
+            "total_records": total,
+            "automated_count": automated_count,
+            "triage_count": triage_count,
+            "normal_count": normal_count,
+            "attack_count": attack_count,
+            "coverage_percent": round(coverage, 2),
+            "triage_percent": round(triage_rate, 2),
+            "margin": margin,
+            "records": records,
+        }
+
+        if labels is not None and automated_labels:
+            response["metrics"] = {
+                "selective_accuracy": accuracy_score(automated_labels, automated_preds),
+                "selective_precision": precision_score(automated_labels, automated_preds, zero_division=0),
+                "selective_recall": recall_score(automated_labels, automated_preds, zero_division=0),
+                "selective_f1": f1_score(automated_labels, automated_preds, zero_division=0),
+            }
+
+        return jsonify(response)
+
+    except OverflowError as exc:
+        return jsonify(error=str(exc)), 413
+    except RuntimeError as exc:
+        return jsonify(error=str(exc), prediction_ready=False), 503
+    except Exception as exc:
+        return jsonify(error=f"Invalid CSV/input: {exc}"), 400
+
+
 if __name__ == "__main__":
     app.run(
         host="127.0.0.1",

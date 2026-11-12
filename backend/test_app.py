@@ -34,5 +34,14 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(parse_ground_truth('1', 5), 1)
     def test_ground_truth_parser_rejects_unknown_label(self):
         with self.assertRaises(ValueError): parse_ground_truth('maybe', 2)
+    def test_triage_missing_features_rejected(self):
+        r=self.client.post('/api/triage',json={'features':{'duration':0}})
+        self.assertEqual(r.status_code,400)
+    def test_triage_empty_body_rejected(self):
+        r=self.client.post('/api/triage',json={})
+        self.assertEqual(r.status_code,400)
+    def test_triage_csv_empty_rejected(self):
+        r=self.client.post('/api/triage/csv',data={'file':(io.BytesIO(b''),'empty.csv')},content_type='multipart/form-data')
+        self.assertEqual(r.status_code,400)
 
 if __name__=='__main__': unittest.main()

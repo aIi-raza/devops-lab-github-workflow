@@ -1,5 +1,6 @@
 """Flask API for recorded research results and real NSL-KDD model inference."""
 from __future__ import annotations
+from flask_cors import CORS
 
 import io
 import os
@@ -25,6 +26,7 @@ from src import artifact_pipeline
 from src.artifact_pipeline import ARTIFACT_DIR, MODEL_NAMES, build_model_input
 
 app = Flask(__name__)
+CORS(app)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 
 MAX_ROWS = 5000

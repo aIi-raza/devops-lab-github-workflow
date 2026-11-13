@@ -1,6 +1,6 @@
 # NSL-KDD Workbench
 
-A research prototype for network intrusion detection on the NSL-KDD dataset. It combines an Angular frontend, a Flask inference API, and a Python model-training pipeline, with CI/CD on GitHub Actions.
+A research prototype for network intrusion detection on the NSL-KDD dataset. It combines an Angular frontend, a Flask inference API and a Python model-training pipeline, with CI/CD on GitHub Actions.
 
 **Live site:** https://aii-raza.github.io/devops-lab-github-workflow/
 
